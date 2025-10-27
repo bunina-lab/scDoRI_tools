@@ -1,0 +1,75 @@
+# scDoRI Single-cell Multiome Data Pre-processing Configuration
+# Global configuration for the single-cell multiome data pre-processing used in scDoRI.
+
+# Logging settings
+logging:
+  level: INFO  # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
+
+# Reproducibility
+random_seed: 42
+
+# Directory structure
+directories:
+  data_dir: "/fast/AG_Bunina/Berk/workdir/scDoRI/exp_sarah"
+  genome_dir: "/fast/AG_Bunina/Berk/workdir/scDoRI/genome"
+  motif_directory: "/fast/AG_Bunina/Berk/projects/scDoRI/assets/motif_database"
+  output_subdir_name: "outputs"
+
+# Input filenames
+input_files:
+  rna_adata_file_name: "merged_rna.h5ad"
+  atac_adata_file_name: "merged_atac.h5ad"
+
+# Species and genome references
+genome:
+  species: "human"  # Options: "human", "mouse"
+  assembly: "hg38"  # Options: "hg38", "mm10", etc.
+  
+  # Optional URLs for genome files (leave null to use defaults)
+  gtf_url: null
+  chrom_sizes_url: null
+  fasta_url: null
+  
+  chrom_sizes_file: "hg38.chrom.sizes"
+
+# Gene and TF selection parameters
+gene_selection:
+  mitochondrial_prefix: "mt-"
+  
+  # User-provided genes/TFs (always included even if not highly variable)
+  genes_user: []  # Example: ["KDM6A", "KDM1A", "KDM5C"]
+  tfs_user: []    # Example: ["Gata6", "Myt1l", "Cdx2", "Sox2"]
+  
+  motif_database: "cisbp"
+  num_genes: 4000
+  num_tfs: 300
+  min_cells_per_gene: 4
+
+# Peak selection parameters
+peak_selection:
+  # Genomic window around each gene for selecting peaks (in base pairs)
+  window_size: 80000  # ±80kb window
+  
+  num_peaks: 100000
+  peak_std_batch_key: "leiden"  # Key in .obs for grouping cells
+  
+  # Promoter logic
+  keep_promoter_peaks: true
+  promoter_col: "promoter_col"  # Column in ATAC .var indicating promoter peaks
+  promoters_bed_file: ""
+
+# Batch correction and clustering
+batch_correction:
+  batch_key: "batch"  # Key in .obs denoting experimental batch
+  leiden_resolution: 10.0  # Resolution for Leiden clustering (metacells)
+
+# In-silico ChIP-seq correlation settings
+correlation:
+  motif_match_pvalue_threshold: 0.001  # 1e-3
+  correlation_percentile: 99  # Percentile cutoff (99 => p≈0.01)
+  n_bg_peaks_for_corr: 5000  # Background peaks per TF for correlation tests
+
+# Distance matrix parameters
+distance:
+  peak_distance_scaling_factor: 20000  # Decay factor for exponential distance weighting
+  # Note: peak_distance_min_cutoff is calculated as exp(-window_size/scaling_factor)

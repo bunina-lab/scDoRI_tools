@@ -1,168 +1,39 @@
 import logging
+import yaml
+import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import List
 
 
 @dataclass
 class TrainConfig:
     """
     Global configuration for the scDoRI modeling pipeline.
-
-    This file defines top-level constants and parameters controlling:
-
-    1. Logging
-    2. File paths for data and outputs
-    3. Model architecture details (numbers of topics, hidden dimensions)
-    4. Training phases and hyperparameters
-    5. Loss weighting for different data modalities (ATAC, TF, RNA)
-    6. Regularization and early stopping settings
-    7. Significance testing cutoffs for TF-gene links
-    8. UMAP parameters for visualization
-
-    Attributes
-    ----------
-    logging_level : int
-        The Python logging level (e.g., logging.INFO).
-    data_dir : Path
-        Base directory containing the processed anndata and other precomputed files.
-    output_subdir : str
-        Subdirectory name within data_dir for storing or accessing outputs.
-    rna_metacell_file : str
-        Name of the H5AD file containing RNA data.
-    atac_metacell_file : str
-        Name of the H5AD file containing ATAC data.
-    batch_col : str
-        Key for the batch column in the AnnData object.
-    gene_peak_distance_file : str
-        Filename for the NumPy array containing gene-peak distances.
-    insilico_chipseq_act_file : str
-        Filename for the in silico ChIP-seq activator embeddings.
-    insilico_chipseq_rep_file : str
-        Filename for the in silico ChIP-seq repressor embeddings.
-    random_seed : int
-        Random seed for reproducibility.
-    batch_size_cell : int
-        Batch size for training.
-    dim_encoder1 : int
-        Dimension of the first encoder layer.
-    dim_encoder2 : int
-        Dimension of the second encoder layer.
-    num_topics : int
-        Number of latent topics for scDoRI.
-    batch_size_cell_prediction : int
-        Batch size when making predictions in eval mode (e.g., forward passes only).
-    epoch_warmup_1 : int
-        Number of epochs to run "warmup_1" (ATAC+TF) before adding RNA.
-    max_scdori_epochs : int
-        Maximum number of epochs for the scDoRI phase 1 training (module 1,2,3).
-    max_grn_epochs : int
-        Maximum number of epochs for the GRN training phase (module 4).
-    update_encoder_in_grn : bool
-        Whether to unfreeze the encoder during the GRN phase.
-    update_peak_gene_in_grn : bool
-        Whether to unfreeze the peak-gene links in the GRN phase.
-    update_topic_peak_in_grn : bool
-        Whether to unfreeze the topic-peak links in the GRN phase.
-    update_topic_tf_in_grn : bool
-        Whether to unfreeze the topic-TF links in the GRN phase.
-    eval_frequency : int
-        How often (in epochs) to evaluate validation loss.
-    phase1_patience : int
-        Early stopping patience (in epochs) for phase 1 training (module 1,2 3).
-    grn_val_patience : int
-        Early stopping patience (in epochs) for the GRN phase.
-    learning_rate_scdori : float
-        Learning rate for scDoRI phase 1 training (module 1,2 3).
-    learning_rate_grn : float
-        Learning rate for the GRN training phase.
-    weight_atac_phase1 : float
-        Loss weight for ATAC reconstruction in Phase 1:warmup_1.
-    weight_tf_phase1 : float
-        Loss weight for TF reconstruction in Phase 1:warmup_1.
-    weight_rna_phase1 : float
-        Loss weight for RNA reconstruction in Phase 1:warmup_1. set to 0.
-    weight_rna_grn_phase1 : float
-        Loss weight for GRN-based RNA reconstruction in Phase 1:warmup_1. set to 0.
-    weight_atac_phase2 : float
-        Loss weight for ATAC reconstruction in Phase 1:warmup_2.
-    weight_tf_phase2 : float
-        Loss weight for TF reconstruction in Phase 1:warmup_2.
-    weight_rna_phase2 : float
-        Loss weight for RNA reconstruction in Phase 1:warmup_2.
-    weight_rna_grn_phase2 : float
-        Loss weight for GRN-based RNA reconstruction in Phase 1:warmup_2. set to 0.
-    weight_atac_grn : float
-        Loss weight for ATAC reconstruction in the GRN phase.
-    weight_tf_grn : float
-        Loss weight for TF reconstruction in the GRN phase.
-    weight_rna_grn : float
-        Loss weight for RNA reconstruction in the GRN phase.
-    weight_rna_from_grn : float
-        Loss weight for the GRN-based RNA branch in the GRN phase.
-    l1_penalty_topic_tf : float
-        L1 regularization coefficient on the topic_tf_decoder.
-    l2_penalty_topic_tf : float
-        L2 regularization coefficient on the topic_tf_decoder.
-    l1_penalty_topic_peak : float
-        L1 regularization coefficient on the topic_peak_decoder.
-    l2_penalty_topic_peak : float
-        L2 regularization coefficient on the topic_peak_decoder.
-    l1_penalty_gene_peak : float
-        L1 regularization coefficient on the gene_peak_factor_learnt.
-    l2_penalty_gene_peak : float
-        L2 regularization coefficient on the gene_peak_factor_learnt.
-    l1_penalty_grn_activator : float
-        L1 regularization on GRN activator parameters (tf_gene_topic_activator_grn).
-    l1_penalty_grn_repressor : float
-        L1 regularization on GRN repressor parameters (tf_gene_topic_repressor_grn).
-    tf_expression_mode : str
-        Either "True" (use actual TF expression) or "latent" (model's predicted TF expression).
-    tf_expression_clamp : float
-        Clamping threshold for TF expression values in [0, 1].
-    cells_per_topic : int
-        Number of cells sampled per topic to compute topic-level TF expression.
-    weights_folder_scdori : str
-        Folder to save model weights after the scDoRI Phase 1.
-    weights_folder_grn : str
-        Folder to save model weights after the GRN phase.
-    best_scdori_model_path : str
-        Filename for saving the best scDoRI model (Phase 1).
-    best_grn_model_path : str
-        Filename for saving the best GRN model.
-    umap_n_neighbors : int
-        Number of neighbors for UMAP.
-    umap_min_dist : float
-        Min dist parameter for UMAP.
-    umap_random_state : int
-        Random seed for UMAP.
-    significance_cutoffs : List[float]
-        List of thresholds for empirical p-value cutoffs in TF-gene link permutation tests.
-    num_permutations : int
-        Number of permutations used to compute TF-gene link significance.
     """
-
     # LOGGING
     logging_level: int = logging.INFO
 
     # DATA PATHS
-    data_dir: Path = Path("/data/m015k/new_metacells/data_gastrulation_single_cell")
-    output_subdir: str = "generated"
+    data_dir: Path = Path("/fast/AG_Bunina/Berk/workdir/scDoRI/exp_sarah")
+    output_subdir: str = "outputs"
     rna_metacell_file: str = "rna_processed.h5ad"
     atac_metacell_file: str = "atac_processed.h5ad"
-    batch_col: str = "sample"
+    batch_col: str = "batch"
+    celltype_col:str = "celltype"
     gene_peak_distance_file: str = "gene_peak_distance_exp.npy"
     insilico_chipseq_act_file: str = "insilico_chipseq_act.npy"
     insilico_chipseq_rep_file: str = "insilico_chipseq_rep.npy"
 
     # RANDOM SEED
-    random_seed: int = 3141
+    random_seed: int = 42
 
     # BATCH / ARCHITECTURE
     batch_size_cell: int = 128
     dim_encoder1: int = 500
     dim_encoder2: int = 200
     num_topics: int = 40
-    batch_size_cell_prediction: int = 512
+    batch_size_cell_prediction: int = 256
 
     # PHASE1
     epoch_warmup_1: int = 5
@@ -213,15 +84,15 @@ class TrainConfig:
     l1_penalty_grn_repressor: float = 0.0000
 
     # TF EXPRESSION SETTINGS
-    tf_expression_mode: str = "True"  # FIXME
+    tf_expression_mode: str = "True" ## True or latent # FIXME
     tf_expression_clamp: float = 0.1
     cells_per_topic: int = 200
 
-    # SAVE FOLDERS
-    weights_folder_scdori: str = "/data/m015k/weights/weights_directory_scdori"
-    weights_folder_grn: str = "/data/m015k/weights/weights_directory_grn"
-    best_scdori_model_path: str = "/data/m015k/models/best_scdori_final.pth"
-    best_grn_model_path: str = "/data/m015k/models/best_grn.pth"
+    # SAVE FOLDERS (will be set in __post_init__)
+    weights_folder_scdori: str = ""
+    weights_folder_grn: str = ""
+    best_scdori_model_path: str = ""
+    best_grn_model_path: str = ""
 
     # UMAP PARAMETERS
     umap_n_neighbors: int = 15
@@ -229,9 +100,332 @@ class TrainConfig:
     umap_random_state: int = 42
 
     # SIGNIFICANCE SETTINGS
-    significance_cutoffs = [0.001, 0.005, 0.01, 0.05]
+    significance_cutoffs: List[float] = None
     num_permutations: int = 1000
 
+    def __post_init__(self):
+        """Initialize default lists and construct file paths."""
+        if self.significance_cutoffs is None:
+            self.significance_cutoffs = [0.001, 0.005, 0.01, 0.05]
+        
+        # Set default paths if not already set
+        if not self.weights_folder_scdori:
+            self.weights_folder_scdori = os.path.join(self.data_dir, "weights", "scdori")
+        if not self.weights_folder_grn:
+            self.weights_folder_grn = os.path.join(self.data_dir, "weights", "grn")
+        if not self.best_scdori_model_path:
+            self.best_scdori_model_path = os.path.join(self.weights_folder_grn, "best_scdori_final.pth")
+        if not self.best_grn_model_path:
+            self.best_grn_model_path = os.path.join(self.weights_folder_grn, "best_grn.pth")
 
-# Create a default configuration instance
-trainConfig = TrainConfig()
+    @classmethod
+    def from_yaml(cls, yaml_path: str) -> 'TrainConfig':
+        """
+        Load configuration from a YAML file.
+        
+        Parameters
+        ----------
+        yaml_path : str
+            Path to the YAML configuration file.
+            
+        Returns
+        -------
+        TrainConfig
+            Configuration object with values from YAML file.
+        """
+        with open(yaml_path, 'r') as file:
+            config_dict = yaml.safe_load(file)
+        
+        kwargs = {}
+        
+        # Logging
+        if 'logging' in config_dict:
+            log_level = config_dict['logging']['level']
+            if isinstance(log_level, str):
+                kwargs['logging_level'] = getattr(logging, log_level.upper())
+            else:
+                kwargs['logging_level'] = log_level
+        
+        # Random seed
+        if 'random_seed' in config_dict:
+            kwargs['random_seed'] = config_dict['random_seed']
+        
+        # Data paths
+        if 'data' in config_dict:
+            data_config = config_dict['data']
+            if 'data_dir' in data_config:
+                kwargs['data_dir'] = Path(data_config['data_dir'])
+            kwargs.update({
+                'output_subdir': data_config.get('output_subdir'),
+                'rna_metacell_file': data_config.get('rna_metacell_file'),
+                'atac_metacell_file': data_config.get('atac_metacell_file'),
+                'batch_col': data_config.get('batch_col'),
+                'gene_peak_distance_file': data_config.get('gene_peak_distance_file'),
+                'insilico_chipseq_act_file': data_config.get('insilico_chipseq_act_file'),
+                'insilico_chipseq_rep_file': data_config.get('insilico_chipseq_rep_file'),
+                'celltype_col': data_config.get('celltype_col'),
+            })
+        
+        # Architecture
+        if 'architecture' in config_dict:
+            arch_config = config_dict['architecture']
+            kwargs.update({
+                'batch_size_cell': arch_config.get('batch_size_cell'),
+                'dim_encoder1': arch_config.get('dim_encoder1'),
+                'dim_encoder2': arch_config.get('dim_encoder2'),
+                'num_topics': arch_config.get('num_topics'),
+                'batch_size_cell_prediction': arch_config.get('batch_size_cell_prediction')
+            })
+        
+        # Training
+        if 'training' in config_dict:
+            train_config = config_dict['training']
+            
+            # Phase 1
+            if 'phase1' in train_config:
+                phase1_config = train_config['phase1']
+                kwargs.update({
+                    'epoch_warmup_1': phase1_config.get('epoch_warmup_1'),
+                    'max_scdori_epochs': phase1_config.get('max_scdori_epochs')
+                })
+                
+                # Warmup 1 weights
+                if 'weights_warmup_1' in phase1_config:
+                    w1 = phase1_config['weights_warmup_1']
+                    kwargs.update({
+                        'weight_atac_phase1': w1.get('weight_atac'),
+                        'weight_tf_phase1': w1.get('weight_tf'),
+                        'weight_rna_phase1': w1.get('weight_rna'),
+                        'weight_rna_grn_phase1': w1.get('weight_rna_grn')
+                    })
+                
+                # Warmup 2 weights
+                if 'weights_warmup_2' in phase1_config:
+                    w2 = phase1_config['weights_warmup_2']
+                    kwargs.update({
+                        'weight_atac_phase2': w2.get('weight_atac'),
+                        'weight_tf_phase2': w2.get('weight_tf'),
+                        'weight_rna_phase2': w2.get('weight_rna'),
+                        'weight_rna_grn_phase2': w2.get('weight_rna_grn')
+                    })
+            
+            # Phase 2
+            if 'phase2' in train_config:
+                phase2_config = train_config['phase2']
+                kwargs.update({
+                    'max_grn_epochs': phase2_config.get('max_grn_epochs')
+                })
+                
+                # Update components
+                if 'update_components' in phase2_config:
+                    updates = phase2_config['update_components']
+                    kwargs.update({
+                        'update_encoder_in_grn': updates.get('update_encoder_in_grn'),
+                        'update_peak_gene_in_grn': updates.get('update_peak_gene_in_grn'),
+                        'update_topic_peak_in_grn': updates.get('update_topic_peak_in_grn'),
+                        'update_topic_tf_in_grn': updates.get('update_topic_tf_in_grn')
+                    })
+                
+                # GRN weights
+                if 'weights_grn' in phase2_config:
+                    grn_weights = phase2_config['weights_grn']
+                    kwargs.update({
+                        'weight_atac_grn': grn_weights.get('weight_atac'),
+                        'weight_tf_grn': grn_weights.get('weight_tf'),
+                        'weight_rna_grn': grn_weights.get('weight_rna'),
+                        'weight_rna_from_grn': grn_weights.get('weight_rna_from_grn')
+                    })
+        
+        # Evaluation
+        if 'evaluation' in config_dict:
+            eval_config = config_dict['evaluation']
+            kwargs.update({
+                'eval_frequency': eval_config.get('eval_frequency'),
+                'phase1_patience': eval_config.get('phase1_patience'),
+                'grn_val_patience': eval_config.get('grn_val_patience')
+            })
+        
+        # Learning rates
+        if 'learning_rates' in config_dict:
+            lr_config = config_dict['learning_rates']
+            kwargs.update({
+                'learning_rate_scdori': lr_config.get('learning_rate_scdori'),
+                'learning_rate_grn': lr_config.get('learning_rate_grn')
+            })
+        
+        # Regularization
+        if 'regularization' in config_dict:
+            reg_config = config_dict['regularization']
+            kwargs.update({
+                'l1_penalty_topic_tf': reg_config.get('l1_penalty_topic_tf'),
+                'l2_penalty_topic_tf': reg_config.get('l2_penalty_topic_tf'),
+                'l1_penalty_topic_peak': reg_config.get('l1_penalty_topic_peak'),
+                'l2_penalty_topic_peak': reg_config.get('l2_penalty_topic_peak'),
+                'l1_penalty_gene_peak': reg_config.get('l1_penalty_gene_peak'),
+                'l2_penalty_gene_peak': reg_config.get('l2_penalty_gene_peak'),
+                'l1_penalty_grn_activator': reg_config.get('l1_penalty_grn_activator'),
+                'l1_penalty_grn_repressor': reg_config.get('l1_penalty_grn_repressor')
+            })
+        
+        # TF expression
+        if 'tf_expression' in config_dict:
+            tf_config = config_dict['tf_expression']
+            kwargs.update({
+                'tf_expression_mode': tf_config.get('mode'),
+                'tf_expression_clamp': tf_config.get('clamp'),
+                'cells_per_topic': tf_config.get('cells_per_topic')
+            })
+        
+        # Model saving paths
+        if 'model_saving' in config_dict:
+            save_config = config_dict['model_saving']
+            data_dir = kwargs.get('data_dir', Path("/fast/AG_Bunina/Berk/workdir/scDoRI/exp_sarah"))
+            kwargs.update({
+                'weights_folder_scdori': os.path.join(data_dir, save_config.get('weights_folder_scdori', 'weights/scdori')),
+                'weights_folder_grn': os.path.join(data_dir, save_config.get('weights_folder_grn', 'weights/grn')),
+                'best_scdori_model_path': os.path.join(data_dir, save_config.get('best_scdori_model_path', 'weights/grn/best_scdori_final.pth')),
+                'best_grn_model_path': os.path.join(data_dir, save_config.get('best_grn_model_path', 'weights/grn/best_grn.pth'))
+            })
+        
+        # UMAP
+        if 'umap' in config_dict:
+            umap_config = config_dict['umap']
+            kwargs.update({
+                'umap_n_neighbors': umap_config.get('n_neighbors'),
+                'umap_min_dist': umap_config.get('min_dist'),
+                'umap_random_state': umap_config.get('random_state')
+            })
+        
+        # Significance testing
+        if 'significance_testing' in config_dict:
+            sig_config = config_dict['significance_testing']
+            kwargs.update({
+                'significance_cutoffs': sig_config.get('cutoffs'),
+                'num_permutations': sig_config.get('num_permutations')
+            })
+        
+        # Remove None values to use defaults
+        kwargs = {k: v for k, v in kwargs.items() if v is not None}
+        
+        return cls(**kwargs)
+
+    def save_yaml(self, yaml_path: str):
+        """
+        Save current configuration to a YAML file.
+        
+        Parameters
+        ----------
+        yaml_path : str
+            Path where to save the YAML configuration file.
+        """
+        # Convert paths to relative paths for cleaner YAML
+        data_dir_str = str(self.data_dir)
+        
+        config_dict = {
+            'logging': {
+                'level': logging.getLevelName(self.logging_level)
+            },
+            'random_seed': self.random_seed,
+            'data': {
+                'data_dir': data_dir_str,
+                'output_subdir': self.output_subdir,
+                'rna_metacell_file': self.rna_metacell_file,
+                'atac_metacell_file': self.atac_metacell_file,
+                'batch_col': self.batch_col,
+                'gene_peak_distance_file': self.gene_peak_distance_file,
+                'insilico_chipseq_act_file': self.insilico_chipseq_act_file,
+                'insilico_chipseq_rep_file': self.insilico_chipseq_rep_file
+            },
+            'architecture': {
+                'batch_size_cell': self.batch_size_cell,
+                'dim_encoder1': self.dim_encoder1,
+                'dim_encoder2': self.dim_encoder2,
+                'num_topics': self.num_topics,
+                'batch_size_cell_prediction': self.batch_size_cell_prediction
+            },
+            'training': {
+                'phase1': {
+                    'epoch_warmup_1': self.epoch_warmup_1,
+                    'max_scdori_epochs': self.max_scdori_epochs,
+                    'weights_warmup_1': {
+                        'weight_atac': self.weight_atac_phase1,
+                        'weight_tf': self.weight_tf_phase1,
+                        'weight_rna': self.weight_rna_phase1,
+                        'weight_rna_grn': self.weight_rna_grn_phase1
+                    },
+                    'weights_warmup_2': {
+                        'weight_atac': self.weight_atac_phase2,
+                        'weight_tf': self.weight_tf_phase2,
+                        'weight_rna': self.weight_rna_phase2,
+                        'weight_rna_grn': self.weight_rna_grn_phase2
+                    }
+                },
+                'phase2': {
+                    'max_grn_epochs': self.max_grn_epochs,
+                    'update_components': {
+                        'update_encoder_in_grn': self.update_encoder_in_grn,
+                        'update_peak_gene_in_grn': self.update_peak_gene_in_grn,
+                        'update_topic_peak_in_grn': self.update_topic_peak_in_grn,
+                        'update_topic_tf_in_grn': self.update_topic_tf_in_grn
+                    },
+                    'weights_grn': {
+                        'weight_atac': self.weight_atac_grn,
+                        'weight_tf': self.weight_tf_grn,
+                        'weight_rna': self.weight_rna_grn,
+                        'weight_rna_from_grn': self.weight_rna_from_grn
+                    }
+                }
+            },
+            'evaluation': {
+                'eval_frequency': self.eval_frequency,
+                'phase1_patience': self.phase1_patience,
+                'grn_val_patience': self.grn_val_patience
+            },
+            'learning_rates': {
+                'learning_rate_scdori': self.learning_rate_scdori,
+                'learning_rate_grn': self.learning_rate_grn
+            },
+            'regularization': {
+                'l1_penalty_topic_tf': self.l1_penalty_topic_tf,
+                'l2_penalty_topic_tf': self.l2_penalty_topic_tf,
+                'l1_penalty_topic_peak': self.l1_penalty_topic_peak,
+                'l2_penalty_topic_peak': self.l2_penalty_topic_peak,
+                'l1_penalty_gene_peak': self.l1_penalty_gene_peak,
+                'l2_penalty_gene_peak': self.l2_penalty_gene_peak,
+                'l1_penalty_grn_activator': self.l1_penalty_grn_activator,
+                'l1_penalty_grn_repressor': self.l1_penalty_grn_repressor
+            },
+            'tf_expression': {
+                'mode': self.tf_expression_mode,
+                'clamp': self.tf_expression_clamp,
+                'cells_per_topic': self.cells_per_topic
+            },
+            'model_saving': {
+                'weights_folder_scdori': os.path.relpath(self.weights_folder_scdori, data_dir_str),
+                'weights_folder_grn': os.path.relpath(self.weights_folder_grn, data_dir_str),
+                'best_scdori_model_path': os.path.relpath(self.best_scdori_model_path, data_dir_str),
+                'best_grn_model_path': os.path.relpath(self.best_grn_model_path, data_dir_str)
+            },
+            'umap': {
+                'n_neighbors': self.umap_n_neighbors,
+                'min_dist': self.umap_min_dist,
+                'random_state': self.umap_random_state
+            },
+            'significance_testing': {
+                'cutoffs': self.significance_cutoffs,
+                'num_permutations': self.num_permutations
+            }
+        }
+        
+        with open(yaml_path, 'w') as file:
+            yaml.dump(config_dict, file, default_flow_style=False, indent=2)
+
+
+# Usage examples:
+
+# Load from YAML file
+# trainConfig = TrainConfig.from_yaml('train_config.yaml')
+
+# Create with defaults and save to YAML
+# default_config = TrainConfig()
+# default_config.save_yaml('default_train_config.yaml')

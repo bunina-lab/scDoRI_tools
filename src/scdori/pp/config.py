@@ -1,7 +1,9 @@
 import logging
-from dataclasses import dataclass
-
+import yaml
 import numpy as np
+from dataclasses import dataclass
+from typing import List, Optional
+from pathlib import Path
 
 
 @dataclass
@@ -85,40 +87,38 @@ class PreprocessingConfig:
     peak_distance_min_cutoff : float
         Minimum allowed scaled distance (exponential) threshold within the user-defined window.
     """
-
     # Logging
     logging_level: int = logging.INFO
 
     # Seed
-    random_seed: int = 3141
+    random_seed: int = 42
 
     # Directory structure
-    data_dir: str = "/data/m015k/new_metacells/data_gastrulation_single_cell"
-    genome_dir: str = "/data/m015k/new_metacells/mouse_genome_files"
-    motif_directory: str = "/home/m015k/code/scDoRI/assets/motif_database"
-    output_subdir_name: str = "generated"
+    data_dir: str = "/fast/AG_Bunina/Berk/workdir/scDoRI/exp_sarah"
+    genome_dir: str = "/fast/AG_Bunina/Berk/workdir/scDoRI/genome"
+    motif_directory: str = "/fast/AG_Bunina/Berk/projects/scDoRI/assets/motif_database"
+    output_subdir_name: str = "outputs"
 
     # Input Filenames
-    rna_adata_file_name: str = "anndata.h5ad"
-    atac_adata_file_name: str = "PeakMatrix_anndata.h5ad"
+    rna_adata_file_name: str = "merged_rna.h5ad"
+    atac_adata_file_name: str = "merged_atac.h5ad"
 
     # Species & references
-    species: str = "mouse"
-    genome_assembly: str = "mm10"
+    species: str = "human"
+    genome_assembly: str = "hg38"
 
     # Optional user-provided URLs for genome files
-    gtf_url: str | None = None
-    chrom_sizes_url: str | None = None
-    fasta_url: str | None = None
+    gtf_url: Optional[str] = None
+    chrom_sizes_url: Optional[str] = None
+    fasta_url: Optional[str] = None
 
-    chrom_sizes_file: str = "mm10.chrom.sizes"
+    chrom_sizes_file: str = "hg38.chrom.sizes"
 
     # Genes & TF selection
     mitochondrial_prefix: str = "mt-"
-
-    genes_user = ["Myt1l"]
-    tfs_user = ["Tbx5", "Myt1l", "Cdx2", "Sox2"]
-    motif_database = "cisbp"
+    genes_user: List[str] = None
+    tfs_user: List[str] = None
+    motif_database: str = "cisbp"
 
     num_genes: int = 4000
     num_tfs: int = 300
@@ -127,16 +127,17 @@ class PreprocessingConfig:
     # Genomic window
     window_size: int = 80000
 
-    num_peaks: int = 90000
+    num_peaks: int = 100000
     peak_std_batch_key: str = "leiden"
 
     # Batch key & metacell parameters
-    batch_key: str = "sample"
+    batch_key: str = "batch"
     leiden_resolution: float = 10
 
     # Promoter logic
     keep_promoter_peaks: bool = True
-    promoter_col: str = "promoter_col"
+    promoter_col: str = "is_promoter"
+    promoters_bed_file: str = ""
 
     # Correlation & in-silico ChIP-seq
     motif_match_pvalue_threshold: float = 1e-3
@@ -146,10 +147,209 @@ class PreprocessingConfig:
     # Distance matrix parameters
     peak_distance_scaling_factor: float = 20000
 
-    # Calculate the min cutoff based on window_size and scaling factor
+    def __post_init__(self):
+        """Initialize default lists if None."""
+        if self.genes_user is None:
+            self.genes_user = []
+        if self.tfs_user is None:
+            self.tfs_user = []
+
     @property
-    def peak_distance_min_cutoff(self) -> float:  # noqa: D102
+    def peak_distance_min_cutoff(self) -> float:
+        """Calculate the min cutoff based on window_size and scaling factor."""
         return np.e ** (-1 * (self.window_size / self.peak_distance_scaling_factor))
 
+    @classmethod
+    def from_yaml(cls, yaml_path: str) -> 'PreprocessingConfig':
+        """
+        Load configuration from a YAML file.
+        
+        Parameters
+        ----------
+        yaml_path : str
+            Path to the YAML configuration file.
+            
+        Returns
+        -------
+        PreprocessingConfig
+            Configuration object with values from YAML file.
+        """
+        with open(yaml_path, 'r') as file:
+            config_dict = yaml.safe_load(file)
+        
+        # Map YAML structure to dataclass fields
+        kwargs = {}
+        
+        # Logging
+        if 'logging' in config_dict:
+            log_level = config_dict['logging']['level']
+            if isinstance(log_level, str):
+                kwargs['logging_level'] = getattr(logging, log_level.upper())
+            else:
+                kwargs['logging_level'] = log_level
+        
+        # Random seed
+        if 'random_seed' in config_dict:
+            kwargs['random_seed'] = config_dict['random_seed']
+        
+        # Directories
+        if 'directories' in config_dict:
+            dir_config = config_dict['directories']
+            kwargs.update({
+                'data_dir': dir_config.get('data_dir'),
+                'genome_dir': dir_config.get('genome_dir'),
+                'motif_directory': dir_config.get('motif_directory'),
+                'output_subdir_name': dir_config.get('output_subdir_name')
+            })
+        
+        # Input files
+        if 'input_files' in config_dict:
+            file_config = config_dict['input_files']
+            kwargs.update({
+                'rna_adata_file_name': file_config.get('rna_adata_file_name'),
+                'atac_adata_file_name': file_config.get('atac_adata_file_name')
+            })
+        
+        # Genome
+        if 'genome' in config_dict:
+            genome_config = config_dict['genome']
+            kwargs.update({
+                'species': genome_config.get('species'),
+                'genome_assembly': genome_config.get('assembly'),
+                'gtf_url': genome_config.get('gtf_url'),
+                'chrom_sizes_url': genome_config.get('chrom_sizes_url'),
+                'fasta_url': genome_config.get('fasta_url'),
+                'chrom_sizes_file': genome_config.get('chrom_sizes_file')
+            })
+        
+        # Gene selection
+        if 'gene_selection' in config_dict:
+            gene_config = config_dict['gene_selection']
+            kwargs.update({
+                'mitochondrial_prefix': gene_config.get('mitochondrial_prefix'),
+                'genes_user': gene_config.get('genes_user', []),
+                'tfs_user': gene_config.get('tfs_user', []),
+                'motif_database': gene_config.get('motif_database'),
+                'num_genes': gene_config.get('num_genes'),
+                'num_tfs': gene_config.get('num_tfs'),
+                'min_cells_per_gene': gene_config.get('min_cells_per_gene')
+            })
+        
+        # Peak selection
+        if 'peak_selection' in config_dict:
+            peak_config = config_dict['peak_selection']
+            kwargs.update({
+                'window_size': peak_config.get('window_size'),
+                'num_peaks': peak_config.get('num_peaks'),
+                'peak_std_batch_key': peak_config.get('peak_std_batch_key'),
+                'keep_promoter_peaks': peak_config.get('keep_promoter_peaks'),
+                'promoter_col': peak_config.get('promoter_col'),
+                'promoters_bed_file': peak_config.get('promoters_bed_file')
+            })
+        
+        # Batch correction
+        if 'batch_correction' in config_dict:
+            batch_config = config_dict['batch_correction']
+            kwargs.update({
+                'batch_key': batch_config.get('batch_key'),
+                'leiden_resolution': batch_config.get('leiden_resolution')
+            })
+        
+        # Correlation
+        if 'correlation' in config_dict:
+            corr_config = config_dict['correlation']
+            kwargs.update({
+                'motif_match_pvalue_threshold': corr_config.get('motif_match_pvalue_threshold'),
+                'correlation_percentile': corr_config.get('correlation_percentile'),
+                'n_bg_peaks_for_corr': corr_config.get('n_bg_peaks_for_corr')
+            })
+        
+        # Distance
+        if 'distance' in config_dict:
+            dist_config = config_dict['distance']
+            kwargs.update({
+                'peak_distance_scaling_factor': dist_config.get('peak_distance_scaling_factor')
+            })
+        
+        # Remove None values to use defaults
+        kwargs = {k: v for k, v in kwargs.items() if v is not None}
+        
+        return cls(**kwargs)
 
-ppConfig = PreprocessingConfig()
+    def save_yaml(self, yaml_path: str):
+        """
+        Save current configuration to a YAML file.
+        
+        Parameters
+        ----------
+        yaml_path : str
+            Path where to save the YAML configuration file.
+        """
+        config_dict = {
+            'logging': {
+                'level': logging.getLevelName(self.logging_level)
+            },
+            'random_seed': self.random_seed,
+            'directories': {
+                'data_dir': self.data_dir,
+                'genome_dir': self.genome_dir,
+                'motif_directory': self.motif_directory,
+                'output_subdir_name': self.output_subdir_name
+            },
+            'input_files': {
+                'rna_adata_file_name': self.rna_adata_file_name,
+                'atac_adata_file_name': self.atac_adata_file_name
+            },
+            'genome': {
+                'species': self.species,
+                'assembly': self.genome_assembly,
+                'gtf_url': self.gtf_url,
+                'chrom_sizes_url': self.chrom_sizes_url,
+                'fasta_url': self.fasta_url,
+                'chrom_sizes_file': self.chrom_sizes_file
+            },
+            'gene_selection': {
+                'mitochondrial_prefix': self.mitochondrial_prefix,
+                'genes_user': self.genes_user,
+                'tfs_user': self.tfs_user,
+                'motif_database': self.motif_database,
+                'num_genes': self.num_genes,
+                'num_tfs': self.num_tfs,
+                'min_cells_per_gene': self.min_cells_per_gene
+            },
+            'peak_selection': {
+                'window_size': self.window_size,
+                'num_peaks': self.num_peaks,
+                'peak_std_batch_key': self.peak_std_batch_key,
+                'keep_promoter_peaks': self.keep_promoter_peaks,
+                'promoter_col': self.promoter_col
+            },
+            'batch_correction': {
+                'batch_key': self.batch_key,
+                'leiden_resolution': self.leiden_resolution
+            },
+            'correlation': {
+                'motif_match_pvalue_threshold': self.motif_match_pvalue_threshold,
+                'correlation_percentile': self.correlation_percentile,
+                'n_bg_peaks_for_corr': self.n_bg_peaks_for_corr
+            },
+            'distance': {
+                'peak_distance_scaling_factor': self.peak_distance_scaling_factor
+            }
+        }
+        
+        with open(yaml_path, 'w') as file:
+            yaml.dump(config_dict, file, default_flow_style=False, indent=2)
+
+
+# Usage examples:
+
+# Load from YAML file
+# config = PreprocessingConfig.from_yaml('config.yaml')
+
+# Create with defaults and save to YAML
+# default_config = PreprocessingConfig()
+# default_config.save_yaml('default_config.yaml')
+
+# Use in your application
+# ppConfig = PreprocessingConfig.from_yaml('path/to/your/config.yaml')

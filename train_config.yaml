@@ -1,0 +1,125 @@
+# scDoRI Training Configuration
+# Global configuration for the scDoRI modeling pipeline
+
+# Logging settings
+logging:
+  level: INFO  # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
+
+# Data paths and files
+data:
+  data_dir: "/fast/AG_Bunina/Berk/workdir/scDoRI/exp_sarah"
+  output_subdir: "outputs"
+  
+  # Input files
+  rna_metacell_file: "rna_processed.h5ad"
+  atac_metacell_file: "atac_processed.h5ad"
+  batch_col: "batch"
+  celltype_col: ""
+  
+  # Precomputed files
+  gene_peak_distance_file: "gene_peak_distance_exp.npy"
+  insilico_chipseq_act_file: "insilico_chipseq_act.npy"
+  insilico_chipseq_rep_file: "insilico_chipseq_rep.npy"
+
+# Reproducibility
+random_seed: 42
+
+# Model architecture
+architecture:
+  batch_size_cell: 128
+  dim_encoder1: 500
+  dim_encoder2: 200
+  num_topics: 40
+  batch_size_cell_prediction: 256
+
+# Training phases
+training:
+  # Phase 1 (scDoRI)
+  phase1:
+    epoch_warmup_1: 5  # Number of epochs for warmup_1 (ATAC+TF only)
+    max_scdori_epochs: 1000  # Maximum epochs for scDoRI training
+    
+    # Loss weights for warmup_1 (ATAC+TF only)
+    weights_warmup_1:
+      weight_atac: 1.0
+      weight_tf: 200.0
+      weight_rna: 0.0  # RNA disabled in warmup_1
+      weight_rna_grn: 0.0  # GRN-based RNA disabled in warmup_1
+    
+    # Loss weights for warmup_2 (ATAC+TF+RNA)
+    weights_warmup_2:
+      weight_atac: 1.0
+      weight_tf: 200.0
+      weight_rna: 20.0
+      weight_rna_grn: 0.0  # GRN-based RNA still disabled
+  
+  # Phase 2 (GRN)
+  phase2:
+    max_grn_epochs: 1000  # Maximum epochs for GRN training
+    
+    # Which components to update during GRN phase
+    update_components:
+      update_encoder_in_grn: false
+      update_peak_gene_in_grn: false
+      update_topic_peak_in_grn: false
+      update_topic_tf_in_grn: false
+    
+    # Loss weights for GRN phase
+    weights_grn:
+      weight_atac: 1.0
+      weight_tf: 200.0
+      weight_rna: 20.0
+      weight_rna_from_grn: 20.0  # GRN-based RNA reconstruction
+
+# Early stopping and evaluation
+evaluation:
+  eval_frequency: 1  # Evaluate every N epochs
+  phase1_patience: 50  # Early stopping patience for Phase 1
+  grn_val_patience: 5  # Early stopping patience for GRN phase
+
+# Learning rates
+learning_rates:
+  learning_rate_scdori: 0.005  # Learning rate for Phase 1
+  learning_rate_grn: 0.001     # Learning rate for Phase 2
+
+# Regularization parameters
+regularization:
+  # Topic-TF decoder regularization
+  l1_penalty_topic_tf: 0.001
+  l2_penalty_topic_tf: 0.000
+  
+  # Topic-peak decoder regularization
+  l1_penalty_topic_peak: 0.001
+  l2_penalty_topic_peak: 0.001
+  
+  # Gene-peak factor regularization
+  l1_penalty_gene_peak: 0.001
+  l2_penalty_gene_peak: 0.005
+  
+  # GRN regularization
+  l1_penalty_grn_activator: 0.00005  # L1 on activator parameters
+  l1_penalty_grn_repressor: 0.0000   # L1 on repressor parameters
+
+# TF expression settings
+tf_expression:
+  mode: "True"  # Options: "True" (actual TF expression) or "latent" (predicted)
+  clamp: 0.1    # Clamping threshold for TF expression values
+  cells_per_topic: 200  # Number of cells sampled per topic
+
+# Model saving paths
+model_saving:
+  weights_folder_scdori: "weights/scdori"  # Relative to data_dir
+  weights_folder_grn: "weights/grn"        # Relative to data_dir
+  best_scdori_model_path: "weights/grn/best_scdori_final.pth"  # Relative to data_dir
+  best_grn_model_path: "weights/grn/best_grn.pth"             # Relative to data_dir
+
+# UMAP visualization parameters
+umap:
+  n_neighbors: 15
+  min_dist: 0.1
+  random_state: 42
+
+# Significance testing for TF-gene links
+significance_testing:
+  cutoffs: [0.001, 0.005, 0.01, 0.05]  # P-value thresholds
+  num_permutations: 1000  # Number of permutations for significance testing

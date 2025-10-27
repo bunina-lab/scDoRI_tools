@@ -1,4 +1,4 @@
-from .config import ppConfig
+from .config import PreprocessingConfig
 from .correlation import compute_in_silico_chipseq
 from .data_io import create_dir_if_not_exists, load_anndata, save_processed_datasets
 from .download import download_genome_references

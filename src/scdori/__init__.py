@@ -22,7 +22,8 @@ from ._core import (
     set_seed,
     train_model_grn,
     train_scdori_phases,
-    trainConfig,
+    #trainConfig,
+    TrainConfig
 )
 from ._version import __version__, __version_tuple__
 from .pl import plot_downstream_targets, plot_topic_activation_heatmap
@@ -41,7 +42,8 @@ from .pp import (
     load_anndata,
     load_gtf,
     load_motif_database,
-    ppConfig,
+    #ppConfig,
+    PreprocessingConfig,
     remove_mitochondrial_genes,
     run_bedtools_intersect,
     save_processed_datasets,

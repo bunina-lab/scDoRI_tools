@@ -1,4 +1,4 @@
-from .config import trainConfig
+from .config import TrainConfig
 from .data_io import load_scdori_inputs, save_model_weights
 from .downstream import (
     compute_activator_tf_activity_per_cell,

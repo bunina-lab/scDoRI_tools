@@ -153,7 +153,7 @@ def get_tf_expression(
     else:
         import torch.nn as nn  # Ensure this import is available if using nn.Softmax
 
-        topic_tf = nn.Softmax(dim=1)(model.decoder.topic_tf_decoder.detach().cpu())
+        topic_tf = nn.Softmax(dim=1)(model.topic_tf_decoder.detach().cpu())
 
         preds_tf_denoised_min, _ = torch.min(topic_tf, dim=1, keepdim=True)
         preds_tf_denoised_max, _ = torch.max(topic_tf, dim=1, keepdim=True)

@@ -7,14 +7,14 @@ logging:
 
 # Data paths and files
 data:
-  data_dir: "/fast/AG_Bunina/Berk/workdir/scDoRI/exp_sarah"
+  data_dir: "./"
   output_subdir: "outputs"
   
   # Input files
   rna_metacell_file: "rna_processed.h5ad"
   atac_metacell_file: "atac_processed.h5ad"
   batch_col: "batch"
-  celltype_col: ""
+  celltype_col: "celltype"
   
   # Precomputed files
   gene_peak_distance_file: "gene_peak_distance_exp.npy"

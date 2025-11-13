@@ -15,7 +15,7 @@ class TrainConfig:
     logging_level: int = logging.INFO
 
     # DATA PATHS
-    data_dir: Path = Path("/fast/AG_Bunina/Berk/workdir/scDoRI/exp_sarah")
+    data_dir: Path = Path("./")
     output_subdir: str = "outputs"
     rna_metacell_file: str = "rna_processed.h5ad"
     atac_metacell_file: str = "atac_processed.h5ad"
@@ -279,7 +279,7 @@ class TrainConfig:
         # Model saving paths
         if 'model_saving' in config_dict:
             save_config = config_dict['model_saving']
-            data_dir = kwargs.get('data_dir', Path("/fast/AG_Bunina/Berk/workdir/scDoRI/exp_sarah"))
+            data_dir = kwargs.get('data_dir', Path("./"))
             kwargs.update({
                 'weights_folder_scdori': os.path.join(data_dir, save_config.get('weights_folder_scdori', 'weights/scdori')),
                 'weights_folder_grn': os.path.join(data_dir, save_config.get('weights_folder_grn', 'weights/grn')),
@@ -332,6 +332,7 @@ class TrainConfig:
                 'rna_metacell_file': self.rna_metacell_file,
                 'atac_metacell_file': self.atac_metacell_file,
                 'batch_col': self.batch_col,
+                'celltype_col': self.celltype_col,
                 'gene_peak_distance_file': self.gene_peak_distance_file,
                 'insilico_chipseq_act_file': self.insilico_chipseq_act_file,
                 'insilico_chipseq_rep_file': self.insilico_chipseq_rep_file

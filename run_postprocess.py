@@ -6,6 +6,39 @@ import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 
+# Convert matrix to long format (source-target-weight)
+def matrix_to_edge_list(matrix, weight_threshold=0):
+    """
+    Convert TF-gene matrix to edge list format.
+    
+    Parameters:
+    -----------
+    matrix : pd.DataFrame
+        Matrix with genes as rows and TFs as columns
+    weight_threshold : float
+        Minimum weight value to include (default: 0, includes all non-zero)
+    
+    Returns:
+    --------
+    pd.DataFrame with columns: source, target, weight
+    """
+    # Stack the matrix to get all combinations
+    stacked = matrix.stack()
+    
+    # Filter out zero or below-threshold weights
+    stacked = stacked[abs(stacked) > weight_threshold]
+    
+    # Reset index to get source and target columns
+    edge_list = stacked.reset_index()
+    edge_list.columns = ['target', 'source', 'weight']
+    
+    # Reorder columns to match your desired format
+    edge_list = edge_list[['source', 'target', 'weight']]
+    
+    # Reset index
+    edge_list = edge_list.reset_index(drop=True)
+    
+    return edge_list
 
 def get_celltype_GRN(grn_topic, df_topic_celltype, tf_names, gene_names, outdir):
 
@@ -16,8 +49,9 @@ def get_celltype_GRN(grn_topic, df_topic_celltype, tf_names, gene_names, outdir)
         cell_GRN = GRN[idx, : , :]
         cell_GRN_df = pd.DataFrame(cell_GRN.T, index=gene_names, columns=tf_names, dtype=np.float32)
         
-        outpath = os.path.join(outdir, f"{cell_}_GRN.tsv")
+        outpath = os.path.join(outdir, f"{cell_}_GRN.tsv".replace(" ", "_").replace("/", "_"))
         cell_GRN_df.to_csv(outpath, sep="\t", index=True)
+        matrix_to_edge_list(cell_GRN_df, weight_threshold=0).to_csv(outpath.replace(".tsv", "_edge_list.tsv"), sep="\t", index=False)
     
     return GRN
 
@@ -30,8 +64,9 @@ def get_celltype_eGRN(GRN_celltype, gene_peak_tensor, df_topic_celltype, peak_na
         cell_GRN = eGRN[idx, : , :]
         cell_GRN_df = pd.DataFrame(cell_GRN.T, index=peak_names, columns=tf_names, dtype=np.float32)
         
-        outpath = os.path.join(outdir, f"{cell_}_eGRN.tsv")
+        outpath = os.path.join(outdir, f"{cell_}_eGRN.tsv".replace(" ", "_").replace("/", "_"))
         cell_GRN_df.to_csv(outpath, sep="\t", index=True)
+        matrix_to_edge_list(cell_GRN_df, weight_threshold=0).to_csv(outpath.replace(".tsv", "_edge_list.tsv"), sep="\t", index=False)
 
     return eGRN
 
@@ -354,12 +389,12 @@ def main(args):
     adata_peak.obs.index = atac_metacell.var.index
     adata_peak.obsm["X_umap"] = umap_embedding_peaks
 
-    atac_metacell.obs["celltype"] = rna_metacell.obs["celltype"].copy()
+    atac_metacell.obs[celltype_column_key] = rna_metacell.obs[celltype_column_key].copy()
 
     # computing average accesiblity of peaks in each celltype
     atac_metacell.layers["counts"] = atac_metacell.X
     sc.pp.normalize_total(atac_metacell)
-    aggregated_atac = sc.get.aggregate(atac_metacell, by="celltype", func=["mean"])
+    aggregated_atac = sc.get.aggregate(atac_metacell, by=celltype_column_key, func=["mean"])
     aggregated_atac.X = aggregated_atac.layers["mean"]
     sc.pp.normalize_total(aggregated_atac)
     sc.pp.scale(aggregated_atac)
@@ -388,7 +423,6 @@ def main(args):
     tf_binding_data_df = pd.DataFrame(tf_binding_data, index=adata_peak.obs.index)
     # Concatenate new columns with existing obs
     adata_peak.obs = pd.concat([adata_peak.obs, tf_binding_data_df], axis=1)
-    adata_peak.obs = tf_binding_data_df
 
     ### Computing ATAC based GRNs with emprirical significance ###
     """
@@ -609,7 +643,7 @@ def main(args):
 
     )
 
-    grn_outpath_dir = out_dir / "GRN_rep"
+    grn_outpath_dir = out_dir / "GRN_rep_TF_gene"
     os.makedirs(grn_outpath_dir, exist_ok=True)
 
     GRN_rep = get_celltype_GRN(

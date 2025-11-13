@@ -109,3 +109,14 @@ Includes:
 ## Citation
 If you use scDoRI in your work, please cite our [preprint](https://www.biorxiv.org/content/10.1101/2025.05.13.653733v1).
 Feel free to open an issue or get in touch at manu.saraswat@dkfz.de
+
+## Wrapper Functions edit:
+ - Added `run_preprocess.py`, `run_train_model.py`, `run_postprocess.py` scripts to run full scDoRI pipelines with ease.
+ - Instead of manually editing project's config.py, just edit `pp_config.yaml` (preprocess_config) or edit `train_config.yaml` files
+ - Run commands:
+  ```
+    python run_preprocess.py --config_yaml pp_config.yaml
+    python run_train_model.py --config_yaml train_config.yaml
+    python run_postprocess.py --config_yaml train_config.yaml  
+    ## Yes, it uses the same config file for the training process. 
+  ```

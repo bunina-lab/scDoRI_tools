@@ -1,5 +1,3 @@
-import yaml
-
 def get_training_config(yaml_path=None):
     from scdori import TrainConfig
     return TrainConfig.from_yaml(yaml_path) if yaml_path else TrainConfig()
@@ -92,6 +90,9 @@ def main(args):
     num_tfs = insilico_act.shape[1]
 
     num_batches = onehot_batch.shape[1]
+
+    ## save config file
+    trainConfig.save_yaml(Path(trainConfig.data_dir) / "train_config.yaml")
 
     ## Building the scDoRI model
     model = scDoRI(

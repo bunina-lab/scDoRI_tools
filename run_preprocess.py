@@ -98,15 +98,32 @@ def main(args):
 
 
     ## Split and save the peak bed.
-    data_atac.var["chr"] = [x.split(":")[0] for x in data_atac.var.index]
-    data_atac.var["start"] = [
-        int(x.split(":")[1].split("-")[0]) if "-" in x else int(x.split(":")[1].split("_")[0]) 
-        for x in data_atac.var.index    
+    if ":" in data_atac.var_names[0]: ##
+        data_atac.var["chr"] = [v.split(":")[0] for v in data_atac.var_names]
+        data_atac.var["start"] = [
+            int(v.split(":")[1].split("-")[0]) if "-" in v else int(v.split(":")[1].split("_")[0]) for v in data_atac.var_names
         ]
-    data_atac.var["end"] = [
-        int(x.split(":")[1].split("-")[1]) if "-" in x else int(x.split(":")[1].split("_")[1])  
-        for x in data_atac.var.index
+        data_atac.var["end"] = [
+            int(v.split(":")[1].split("-")[1]) if "-" in v else int(v.split(":")[1].split("_")[1]) for v in data_atac.var_names
+            ]
+    
+    elif "_" in data_atac.var_names[0]:
+        data_atac.var["chr"] = [v.split("_")[0] for v in data_atac.var_names]
+        data_atac.var["start"] = [
+            int(v.split("_")[1].split("-")[0]) if "-" in v else int(v.split("_")[1]) for v in data_atac.var_names
         ]
+        data_atac.var["end"] = [
+            int(v.split("_")[1].split("-")[1]) if "-" in v else int(v.split("_")[2]) for v in data_atac.var_names
+            ]
+    
+    elif "-" in data_atac.var_names[0]:
+        data_atac.var["chr"] = [v.split("-")[0] for v in data_atac.var_names]
+        data_atac.var["start"] = [int(v.split("-")[1]) for v in data_atac.var_names]
+        data_atac.var["end"] = [int(v.split("-")[2]) for v in data_atac.var_names]
+    
+    else:
+        raise ValueError(f"Could not parse the peak column:\n{data_atac.var_names[0]}")
+    
     data_atac.var["peak_name"] = data_atac.var.index
     all_peaks_bed = out_dir / "peaks_all.bed"
     data_atac.var[["chr", "start", "end", "peak_name"]].to_csv(
@@ -184,13 +201,32 @@ def main(args):
 
     save_processed_datasets(data_rna, data_atac, out_dir)
 
-    data_atac.var["chr"] = [v.split(":")[0] for v in data_atac.var_names]
-    data_atac.var["start"] = [
-        int(v.split(":")[1].split("-")[0]) if "-" in v else int(v.split(":")[1].split("_")[0]) for v in data_atac.var_names
-    ]
-    data_atac.var["end"] = [
-        int(v.split(":")[1].split("-")[1]) if "-" in v else int(v.split(":")[1].split("_")[1]) for v in data_atac.var_names
+    if ":" in data_atac.var_names[0]: ##
+        data_atac.var["chr"] = [v.split(":")[0] for v in data_atac.var_names]
+        data_atac.var["start"] = [
+            int(v.split(":")[1].split("-")[0]) if "-" in v else int(v.split(":")[1].split("_")[0]) for v in data_atac.var_names
         ]
+        data_atac.var["end"] = [
+            int(v.split(":")[1].split("-")[1]) if "-" in v else int(v.split(":")[1].split("_")[1]) for v in data_atac.var_names
+            ]
+    
+    elif "_" in data_atac.var_names[0]:
+        data_atac.var["chr"] = [v.split("_")[0] for v in data_atac.var_names]
+        data_atac.var["start"] = [
+            int(v.split("_")[1].split("-")[0]) if "-" in v else int(v.split("_")[1]) for v in data_atac.var_names
+        ]
+        data_atac.var["end"] = [
+            int(v.split("_")[1].split("-")[1]) if "-" in v else int(v.split("_")[2]) for v in data_atac.var_names
+            ]
+    
+    elif "-" in data_atac.var_names[0]:
+        data_atac.var["chr"] = [v.split("-")[0] for v in data_atac.var_names]
+        data_atac.var["start"] = [int(v.split("-")[1]) for v in data_atac.var_names]
+        data_atac.var["end"] = [int(v.split("-")[2]) for v in data_atac.var_names]
+    
+    else:
+        raise ValueError(f"Could not parse the peak column:\n{data_atac.var_names[0]}")
+    
     
     data_atac.var["peak_name"] = data_atac.var_names
     peaks_bed = out_dir / "peaks_selected.bed"

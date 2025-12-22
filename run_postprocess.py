@@ -140,7 +140,7 @@ def plot_umap(anndata_obj, colour_col:list|str, outdir):
     sns.set(font_scale=0.3)
 
     sns.set_style("whitegrid")
-    with plt.rc_context({"figure.figsize": (7, 7), "figure.dpi": (600)}):
+    with plt.rc_context({"figure.figsize": (8, 12), "figure.dpi": (600)}):
         umap_fig = sc.pl.umap(
             anndata_obj,
             color=colour_col,
@@ -159,38 +159,48 @@ def plot_heatmap(df_plot, label, outdir):
     import matplotlib.pyplot as plt
     import seaborn as sns
 
-    # Create the clustermap with smaller figure size for smaller cells
+    # Create figure with appropriate size
+    fig, ax = plt.subplots(figsize=(18, 6))  # Adjust width as needed
+    
+    # Create the heatmap
     g = sns.heatmap(
         df_plot,
-        cmap='coolwarm',#'coolwarm',#'RdBu_r',
-        #vmin=-2.5,
-        #vmax=2.5,
-        annot_kws={"size": 10, "square" : True},  # Reduced annotation size to fit smaller cells
-        center=0,  # Center colormap at 0
-        square=True,  # Make cells square-shaped
-        linewidths=0.7,  # Thin lines between cells
+        cmap='coolwarm',
+        annot_kws={"size": 10, "square": True},
+        center=0,
+        square=True,
+        linewidths=0.6,
         linecolor='white',
         cbar_kws={
             'label': label,
-            'shrink': 0.8,  # Make colorbar slightly smaller
+            'shrink': 0.9,  # Make colorbar slightly smaller
             'orientation': 'horizontal',   # 'vertical' or 'horizontal'
             'location': 'top',        # 'left', 'right', 'top', 'bottom'
-            'aspect': 25,   # Make colorbar thinner
+            'aspect': 15,   # Make colorbar thinner
             'pad': 0.02,
             'format': '%.1f',
-            #'extend': 'both',
-        }
+        },
+        ax=ax
     )
 
+    # Set x-axis labels explicitly to show all of them
+    ax.set_xticks(range(len(df_plot.columns)))
+    ax.set_xticklabels(df_plot.columns, rotation=90, ha='center', fontsize=8)
+    # Add tick lines for x-axis
+    ax.tick_params(axis='x', which='major', length=4, width=0.5, direction='out', bottom=True)
+    
+    # Set y-axis labels
+    ax.set_yticks(range(len(df_plot.index)))
+    ax.set_yticklabels(df_plot.index, rotation=0, fontsize=10)
 
     # Increase and rotate x-axis tick labels
-    g.tick_params(axis='x', labelsize=9, rotation=65)
-    g.tick_params(axis='y', labelsize=9, rotation=0)
+    #g.tick_params(axis='x', labelsize=8, rotation=90)
+    #g.tick_params(axis='y', labelsize=8, rotation=0)
 
-    # Optional: Adjust the layout to prevent label cutoff
+    # Adjust layout to prevent label cutoff
     plt.tight_layout()
 
-    g.figure.savefig(os.path.join(outdir, f"{label}.png"), dpi=800, bbox_inches='tight')
+    fig.savefig(os.path.join(outdir, f"{label}.png"), dpi=800, bbox_inches='tight')
     plt.close()
 
 def get_gene_peak_df(peak_celltype_df, gene_name:str, rna_metacell, atac_metacell, gene_peak, threshold=0.95):
@@ -596,18 +606,6 @@ def main(args):
         model.gene_peak_factor_fixed.detach().cpu().numpy()
     )
 
-    # computing average accesiblity of peaks in each celltype
-    atac_metacell.layers["counts"] = atac_metacell.X
-    sc.pp.normalize_total(atac_metacell)
-    aggregated_atac = sc.get.aggregate(atac_metacell, by=trainConfig.celltype_col, func=["mean"])
-    aggregated_atac.X = aggregated_atac.layers["mean"]
-    sc.pp.normalize_total(aggregated_atac)
-    sc.pp.scale(aggregated_atac)
-
-    # adding average accesibility of each peak in a celltype to peak anndata
-    peak_celltype_df = aggregated_atac.to_df().T
-    peak_celltype_df = peak_celltype_df.loc[adata_peak.obs.index.values]
-    adata_peak.obs = pd.concat([adata_peak.obs, peak_celltype_df], axis=1)
 
     ### calculate and save gene_peak interactions per celltype
     gene_peak_outdir = os.path.join(out_dir, "gene_peak_interactions")

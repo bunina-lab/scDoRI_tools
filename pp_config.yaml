@@ -10,9 +10,9 @@ random_seed: 42
 
 # Directory structure
 directories:
-  data_dir: "/fast/AG_Bunina/Berk/workdir/scDoRI/exp_sarah"
-  genome_dir: "/fast/AG_Bunina/Berk/workdir/scDoRI/genome"
-  motif_directory: "/fast/AG_Bunina/Berk/projects/scDoRI/assets/motif_database"
+  data_dir: "./"
+  genome_dir: "./genome"
+  motif_directory: "./assets/motif_database"
   output_subdir_name: "outputs"
 
 # Input filenames

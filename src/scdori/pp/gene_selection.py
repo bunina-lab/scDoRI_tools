@@ -136,18 +136,24 @@ def compute_hvgs_and_tfs(
 
     selected_tfs = sorted(list(data_rna_tf.var_names) + valid_tfs_user)
 
-    # 3) HVGs among non-TFs
-    non_tf_candidates = set(data_rna.var_names) - set(selected_tfs) - set(valid_genes_user)
+    # 3) HVGs among non-TFs (strictly exclude all TFs)
+    #non_tf_candidates = set(data_rna.var_names) - set(selected_tfs) - set(valid_genes_user) ##Original code
+    #data_rna_non_tf = data_rna[:, sorted(non_tf_candidates)].copy() ## Original code
+    all_tfs_in_data = set(data_rna.var_names).intersection(tf_names)
+    non_tf_candidates = set(data_rna.var_names) - all_tfs_in_data - set(valid_genes_user)
     data_rna_non_tf = data_rna[:, sorted(non_tf_candidates)].copy()
     sc.pp.normalize_total(data_rna_non_tf)
     sc.pp.log1p(data_rna_non_tf)
     sc.pp.highly_variable_genes(data_rna_non_tf, n_top_genes=num_genes_hvg, subset=True)
 
     selected_non_tfs = sorted(set(data_rna_non_tf.var_names).union(valid_genes_user))
-    selected_non_tfs = [g for g in selected_non_tfs if g not in selected_tfs]
+    #selected_non_tfs = [g for g in selected_non_tfs if g not in selected_tfs] Original code
+    #final_genes = selected_non_tfs
+    #final_tfs = selected_tfs
 
-    final_genes = selected_non_tfs
-    final_tfs = selected_tfs
+    # Ensure we have exactly the requested numbers
+    final_tfs = selected_tfs[:num_tfs]
+    final_genes = selected_non_tfs[:num_genes]
 
     combined = final_genes + final_tfs
     data_rna_processed = data_rna[:, combined].copy()

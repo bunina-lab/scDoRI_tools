@@ -140,9 +140,19 @@ def get_tf_expression(
         rna_tf_vals = np.array(rna_tf_vals)
 
         median_cell = np.median(rna_tf_vals.sum(axis=1))
-        rna_tf_vals = median_cell * (rna_tf_vals / rna_tf_vals.sum(axis=1, keepdims=True))
+        
+        ## Original code
+        #rna_tf_vals = median_cell * (rna_tf_vals / rna_tf_vals.sum(axis=1, keepdims=True))
+
+        # normalise without creating NaNs; zero-sum rows remain zero; additionally we avoid the division by 0
+        row_sums = rna_tf_vals.sum(axis=1, keepdims=True)
+        rna_tf_vals = np.divide(
+            rna_tf_vals, row_sums, out=np.zeros_like(rna_tf_vals, dtype=float), where=row_sums != 0
+        ) * median_cell
         topic_tf = np.array([rna_tf_vals[top_k_indices[:, t], :].mean(axis=0) for t in range(model.num_topics)])
-        topic_tf = torch.from_numpy(topic_tf)
+        param_dtype = next(model.parameters()).dtype   # add once near the top of the function if you prefer
+        topic_tf = torch.from_numpy(topic_tf).to(dtype=param_dtype)
+        ##topic_tf = torch.from_numpy(topic_tf) ## Original code
 
         preds_tf_denoised_min, _ = torch.min(topic_tf, dim=1, keepdim=True)
         preds_tf_denoised_max, _ = torch.max(topic_tf, dim=1, keepdim=True)

@@ -24,6 +24,7 @@ class TrainConfig:
     gene_peak_distance_file: str = "gene_peak_distance_exp.npy"
     insilico_chipseq_act_file: str = "insilico_chipseq_act.npy"
     insilico_chipseq_rep_file: str = "insilico_chipseq_rep.npy"
+    use_specificity_weighted_topics: bool = False
 
     # RANDOM SEED
     random_seed: int = 42
@@ -164,6 +165,7 @@ class TrainConfig:
                 'insilico_chipseq_act_file': data_config.get('insilico_chipseq_act_file'),
                 'insilico_chipseq_rep_file': data_config.get('insilico_chipseq_rep_file'),
                 'celltype_col': data_config.get('celltype_col'),
+                'use_specificity_weighted_topics': data_config.get('use_specificity_weighted_topics'),
             })
         
         # Architecture
@@ -335,7 +337,9 @@ class TrainConfig:
                 'celltype_col': self.celltype_col,
                 'gene_peak_distance_file': self.gene_peak_distance_file,
                 'insilico_chipseq_act_file': self.insilico_chipseq_act_file,
-                'insilico_chipseq_rep_file': self.insilico_chipseq_rep_file
+                'insilico_chipseq_rep_file': self.insilico_chipseq_rep_file,
+                'celltype_col': self.celltype_col,
+                'use_specificity_weighted_topics': self.use_specificity_weighted_topics
             },
             'architecture': {
                 'batch_size_cell': self.batch_size_cell,

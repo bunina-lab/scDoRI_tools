@@ -1,5 +1,4 @@
 from typing import Literal
-import yaml
 import os
 import pandas as pd
 import numpy as np
@@ -80,7 +79,14 @@ def get_training_config(yaml_path=None):
     from scdori import TrainConfig
     return TrainConfig.from_yaml(yaml_path) if yaml_path else TrainConfig()
 
-def get_celltype_topic_activation(rna_anndata, groupby_key=["celltype"], aggregation="mean"):
+def get_celltype_topic_activation(rna_anndata, groupby_key=["celltype"], aggregation="mean", use_specificity=False):
+    if use_specificity:
+        print("Using specificity weighted topics")
+        if len(groupby_key) > 1:
+            print("Only one groupby key is supported for specificity weighted topics")
+            raise ValueError("Only one groupby key is supported for specificity weighted topics")
+        df_topic_celltype = get_specificity_weighted_topics(rna_anndata, groupby_key=groupby_key[0], normalise=True)
+        return df_topic_celltype
     
     latent = rna_anndata.obsm["X_scdori"]  # shape (n_cells, num_topics)
     df_latent = pd.DataFrame(latent, columns=[f"Topic_{i}" for i in range(latent.shape[1])])
@@ -94,6 +100,53 @@ def get_celltype_topic_activation(rna_anndata, groupby_key=["celltype"], aggrega
         raise ValueError("aggregation type is not known")
 
     return df_grouped.T
+
+def get_specificity_weighted_topics(rna_anndata, groupby_key="celltype", normalise=True):
+    """
+     Creates a Topic x Celltype dataframe weighted by specificity scores.
+    """
+    import scanpy as sc
+    import anndata as ad
+    import pandas as pd
+    import numpy as np
+
+    # 1. Create Topic AnnData
+    latent = rna_anndata.obsm["X_scdori"]
+    adata_topics = ad.AnnData(latent)
+    adata_topics.obs[groupby_key] = rna_anndata.obs[groupby_key].values
+    adata_topics.var_names = [f"Topic_{i}" for i in range(latent.shape[1])]
+    
+    # 2. Run Scanpy ranking to get specificity scores (t-stats)
+    # Wilcoxon is great for rankings, but 't-test' provides a better continuous 
+    # score for weighting matrices.
+    sc.tl.rank_genes_groups(adata_topics, groupby=groupby_key, method='t-test')
+    
+    # 3. Extract the scores into a Matrix (Celltypes x Topics)
+    groups = adata_topics.obs[groupby_key].unique()
+    topic_names = adata_topics.var_names
+    
+    # Initialize matrix
+    spec_matrix = pd.DataFrame(index=topic_names, columns=groups)
+    
+    for group in groups:
+        # Get the scores for all topics for this specific group
+        res = sc.get.rank_genes_groups_df(adata_topics, group=group)
+        res.set_index('names', inplace=True)
+        # We use the 'scores' column which represents the t-statistic
+        spec_matrix[group] = res.loc[topic_names, 'scores']
+    
+    # 4. Refine the weights: 
+    # We usually want non-negative weights for GRN aggregation.
+    # We clip at 0 so only 'enriched' topics contribute to the celltype GRN.
+    spec_matrix = spec_matrix.clip(lower=0)
+    
+    # Optional: Normalize column-wise so that weights for each celltype sum to 1
+    # This prevents celltypes with very strong topics from having "larger" GRNs 
+    # than others if you want them comparable.
+    if normalise:
+        spec_matrix = spec_matrix / spec_matrix.sum(axis=0)
+    
+    return spec_matrix
 
 def get_rep_or_act_celltype_df(cell_tf, tf_names, rna_metacell, celltype_column_key, out_dir, label:Literal["act", "rep"]):
     # aggregating activity per celltype
@@ -135,32 +188,74 @@ def plot_umap(anndata_obj, colour_col:list|str, outdir):
     import scanpy as sc
     import matplotlib.pyplot as plt
 
-    out_string =os.path.join(outdir, f'umap_{"_".join(colour_col) if isinstance(colour_col, list) else colour_col}.png')
+    out_string = os.path.join(outdir, f'umap_{"_".join(colour_col) if isinstance(colour_col, list) else colour_col}.png')
 
-    sns.set(font_scale=0.3)
-
+    sns.set(font_scale=1.5)
     sns.set_style("whitegrid")
-    with plt.rc_context({"figure.figsize": (8, 12), "figure.dpi": (600)}):
-        umap_fig = sc.pl.umap(
-            anndata_obj,
-            color=colour_col,
-            add_outline=True,
-            outline_color=("white", "black"),
-            size=10,
-            #save=out_string,
-            show=False,
-            return_fig=True
-        )
-
-        umap_fig.savefig(out_string)
-        plt.close(umap_fig)
+    
+    # Convert single color to list for uniform handling
+    colour_list = colour_col if isinstance(colour_col, list) else [colour_col]
+    
+    # Determine figure layout
+    n_plots = len(colour_list)
+    fig, axes = plt.subplots(1, n_plots, figsize=(12 * n_plots, 12), dpi=800)
+    # Handle single subplot case (axes won't be an array)
+    if n_plots == 1:
+        axes = [axes]
+    
+    for idx, col in enumerate(colour_list):
+        # First plot gets text annotations, rest get legends
+        if idx == 0:
+            sc.pl.umap(
+                anndata_obj,
+                color=col,
+                add_outline=True,
+                outline_color=("white", "black"),
+                size=10,
+                ax=axes[idx],
+                show=False,
+                legend_loc='none'
+            )
+            
+            # Add text annotations at centroids
+            for category in anndata_obj.obs[col].unique():
+                mask = anndata_obj.obs[col] == category
+                centroid_x = anndata_obj.obsm['X_umap'][mask, 0].mean()
+                centroid_y = anndata_obj.obsm['X_umap'][mask, 1].mean()
+                
+                axes[idx].text(centroid_x, centroid_y, category, 
+                             fontsize=12, fontweight='bold',
+                             ha='center', va='center',
+                             bbox=dict(boxstyle='round,pad=0.3', 
+                                      facecolor='white', 
+                                      edgecolor='black',
+                                      alpha=0.85))
+            
+            axes[idx].set_title(col)
+        else:
+            sc.pl.umap(
+                anndata_obj,
+                color=col,
+                add_outline=True,
+                outline_color=("white", "black"),
+                size=10,
+                ax=axes[idx],
+                show=False,
+                legend_loc='right margin'
+            )
+            
+            axes[idx].set_title(col)
+    
+    plt.tight_layout()
+    fig.savefig(out_string)
+    plt.close(fig)
 
 def plot_heatmap(df_plot, label, outdir):
     import matplotlib.pyplot as plt
     import seaborn as sns
 
     # Create figure with appropriate size
-    fig, ax = plt.subplots(figsize=(18, 6))  # Adjust width as needed
+    fig, ax = plt.subplots(figsize=(24, 12))  # Adjust width as needed
     
     # Create the heatmap
     g = sns.heatmap(
@@ -176,7 +271,7 @@ def plot_heatmap(df_plot, label, outdir):
             'shrink': 0.9,  # Make colorbar slightly smaller
             'orientation': 'horizontal',   # 'vertical' or 'horizontal'
             'location': 'top',        # 'left', 'right', 'top', 'bottom'
-            'aspect': 15,   # Make colorbar thinner
+            'aspect': 20,   # Make colorbar thinner
             'pad': 0.02,
             'format': '%.1f',
         },
@@ -254,9 +349,11 @@ def main(args):
     logger = logging.getLogger(__name__)
     logging.basicConfig(level=trainConfig.logging_level)
 
-    ## set output directory ##
+    ## set output directory with timestamp ##
+    import datetime
     data_dir = Path(trainConfig.data_dir)
-    out_dir = data_dir / trainConfig.output_subdir / "postprocess"
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    out_dir = data_dir / trainConfig.output_subdir / "postprocess" / timestamp
 
     if not out_dir.exists():
         logger.info(f"Creating directory: {out_dir}")
@@ -363,26 +460,26 @@ def main(args):
 
     
     df_topic_celltype = get_celltype_topic_activation(
-    rna_metacell, groupby_key=[celltype_column_key], aggregation="mean"
+    rna_metacell, groupby_key=[celltype_column_key], aggregation="mean", use_specificity=trainConfig.use_specificity_weighted_topics
     )
 
     ### remove not active topics ###
     # removing topics not active highly in any of the celltypes
     select_topics = [
-        "Topic_" + str(k) for k in np.where(df_topic_celltype.max(axis=1) > 0.07)[0]
+        "Topic_" + str(k) for k in np.where(df_topic_celltype.max(axis=1) > 0.00)[0]
     ]
 
     plot_heatmap(
         df_plot=df_topic_celltype.loc[select_topics],
-        label="Average_Topic_Activation",
+        label="Average_Topic_Activation" + ("_specificity" if trainConfig.use_specificity_weighted_topics else ""),
         outdir=out_dir
     )
 
     ### Compute Top genes per topic ###
     topic_gene_embedding = compute_topic_gene_matrix(model, device)
-    adata_gene = sc.AnnData(topic_gene_embedding)
+    adata_gene = sc.AnnData(topic_gene_embedding.T)
     adata_gene.var.index = ["Topic_" + str(i) for i in range(model.num_topics)]
-    adata_gene.obs.index = rna_metacell.var.index
+    adata_gene.obs.index = rna_metacell.var.index.values
 
 
     ### Compute peaks per topic ###

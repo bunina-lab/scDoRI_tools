@@ -15,6 +15,7 @@ data:
   atac_metacell_file: "atac_processed.h5ad"
   batch_col: "batch"
   celltype_col: "celltype"
+  use_specificity_weighted_topics: false
   
   # Precomputed files
   gene_peak_distance_file: "gene_peak_distance_exp.npy"

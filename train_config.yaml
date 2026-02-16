@@ -124,3 +124,9 @@ umap:
 significance_testing:
   cutoffs: [0.001, 0.005, 0.01, 0.05]  # P-value thresholds
   num_permutations: 1000  # Number of permutations for significance testing
+# Weights & Biases settings for real-time loss plotting
+wandb:
+  use_wandb: false
+  project: "scdori"
+  entity: null
+  run_name: null

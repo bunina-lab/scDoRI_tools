@@ -34,6 +34,19 @@ def main(args):
     logger = logging.getLogger(__name__)
     logging.basicConfig(level=trainConfig.logging_level)
 
+    if trainConfig.use_wandb:
+        try:
+            import wandb
+            wandb.init(
+                project=trainConfig.wandb_project,
+                entity=trainConfig.wandb_entity,
+                name=trainConfig.wandb_run_name,
+                config=trainConfig.__dict__
+            )
+            logger.info("Weights & Biases initialized.")
+        except ImportError:
+            logger.warning("wandb not installed, skipping wandb initialization.")
+
     logger.info("Starting scDoRI pipeline with integrated GRN.")
     set_seed(trainConfig.random_seed)
 

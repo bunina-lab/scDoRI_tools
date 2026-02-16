@@ -558,6 +558,20 @@ def train_model_grn(
             f"RNA={epoch_loss_rna:.4f}, RNA-GRN={epoch_loss_rna_grn:.4f}"
         )
 
+        if config_file.use_wandb:
+            try:
+                import wandb
+                wandb.log({
+                    "grn/train/total_loss": epoch_loss,
+                    "grn/train/atac_loss": epoch_loss_atac,
+                    "grn/train/tf_loss": epoch_loss_tf,
+                    "grn/train/rna_loss": epoch_loss_rna,
+                    "grn/train/rna_grn_loss": epoch_loss_rna_grn,
+                    "epoch": epoch
+                })
+            except ImportError:
+                pass
+
         # Evaluate every config.eval_frequency epochs
         if (epoch + 1) % config_file.eval_frequency == 0:
             eval_loss, eval_loss_atac, eval_loss_tf, eval_loss_rna, eval_loss_rna_grn = compute_eval_loss_grn(
@@ -578,6 +592,20 @@ def train_model_grn(
                 f"EvalAtac={eval_loss_atac:.4f}, EvalTF={eval_loss_tf:.4f}, "
                 f"EvalRNA={eval_loss_rna:.4f}, EvalRNA-GRN={eval_loss_rna_grn:.4f}"
             )
+
+            if config_file.use_wandb:
+                try:
+                    import wandb
+                    wandb.log({
+                        "grn/val/total_loss": eval_loss,
+                        "grn/val/atac_loss": eval_loss_atac,
+                        "grn/val/tf_loss": eval_loss_tf,
+                        "val/rna_loss": eval_loss_rna,
+                        "grn/val/rna_grn_loss": eval_loss_rna_grn,
+                        "epoch": epoch
+                    })
+                except ImportError:
+                    pass
 
             # Early stopping on eval_loss_rna_grn
             if eval_loss_rna_grn < best_eval_loss:

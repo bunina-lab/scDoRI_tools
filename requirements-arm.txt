@@ -1,0 +1,41 @@
+# scDoRI Requirements for ARM Architecture (macOS Apple Silicon)
+# Generated on: 2026-02-16
+
+# --- Core Dependencies ---
+torch>=2.0.0
+torchvision
+torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+# NumPy < 2.0 is REQUIRED for ARM compatibility with current binary wheels (pyarrow, scanpy, etc.)
+numpy<2.0.0
+
+# --- Single-Cell & Multi-Omics ---
+anndata>=0.9.0
+scanpy>=1.9.0
+gtfparse>=2.0.0
+harmonypy
+decoupler
+leidenalg
+igraph
+
+# --- Numerical & Data Science ---
+pandas>=2.0.0
+scipy
+scikit-learn
+seaborn
+matplotlib
+umap-learn
+tqdm
+session-info2
+
+# --- Genomic Tools ---
+# tangermeme < 0.5.0 is required for compatibility with current scDoRI implementation
+tangermeme>=0.4.0,<0.5.0
+pyarrow
+pyBigWig
+pyfaidx
+
+# --- Interactive Development ---
+ipykernel
+ipython
+jupyter

@@ -114,21 +114,21 @@ class scDoRI(nn.Module):
         self.encoder_rna = nn.Sequential(
             nn.Linear(num_genes + 2, dim_encoder1),
             nn.BatchNorm1d(dim_encoder1) if batch_norm else nn.Identity(),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Dropout(0.05),
             nn.Linear(dim_encoder1, dim_encoder2),
             nn.BatchNorm1d(dim_encoder2) if batch_norm else nn.Identity(),
-            nn.ReLU(),
+            nn.GELU(),
         )
         # ENCODER for ATAC
         self.encoder_atac = nn.Sequential(
             nn.Linear(num_peaks + 2, dim_encoder1),
             nn.BatchNorm1d(dim_encoder1) if batch_norm else nn.Identity(),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Dropout(0.05),
             nn.Linear(dim_encoder1, dim_encoder2),
             nn.BatchNorm1d(dim_encoder2) if batch_norm else nn.Identity(),
-            nn.ReLU(),
+            nn.GELU(),
         )
         self.mu_theta = nn.Linear(dim_encoder2 * 2, num_topics)
 
@@ -154,22 +154,22 @@ class scDoRI(nn.Module):
         self.tf_library_factor = nn.Sequential(
             nn.Linear(num_tfs, dim_encoder2),
             nn.BatchNorm1d(dim_encoder2) if batch_norm else nn.Identity(),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Dropout(0.05),
             nn.Linear(dim_encoder2, dim_encoder1),
             nn.BatchNorm1d(dim_encoder1) if batch_norm else nn.Identity(),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Linear(dim_encoder1, 1),
             nn.Softplus(),
         )
         self.rna_library_factor = nn.Sequential(
             nn.Linear(num_genes, dim_encoder2),
             nn.BatchNorm1d(dim_encoder2) if batch_norm else nn.Identity(),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Dropout(0.05),
             nn.Linear(dim_encoder2, dim_encoder1),
             nn.BatchNorm1d(dim_encoder1) if batch_norm else nn.Identity(),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Linear(dim_encoder1, 1),
             nn.Softplus(),
         )

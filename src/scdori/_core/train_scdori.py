@@ -362,6 +362,20 @@ def train_scdori_phases(
             f"Atac={epoch_loss_atac:.4f}, TF={epoch_loss_tf:.4f}, RNA={epoch_loss_rna:.4f}"
         )
 
+        if config_file.use_wandb:
+            try:
+                import wandb
+                wandb.log({
+                    "train/total_loss": epoch_loss,
+                    "train/atac_loss": epoch_loss_atac,
+                    "train/tf_loss": epoch_loss_tf,
+                    "train/rna_loss": epoch_loss_rna,
+                    "epoch": epoch,
+                    "phase": phase
+                })
+            except ImportError:
+                pass
+
         # Evaluate periodically
         if (epoch + 1) % config_file.eval_frequency == 0:
             eval_loss, eval_loss_atac, eval_loss_tf, eval_loss_rna = compute_eval_loss_scdori(
@@ -380,6 +394,19 @@ def train_scdori_phases(
                 f"[Eval ] Epoch={epoch}, Phase={phase}, EvalLoss={eval_loss:.4f}, "
                 f"EvalAtac={eval_loss_atac:.4f}, EvalTF={eval_loss_tf:.4f}, EvalRNA={eval_loss_rna:.4f}"
             )
+
+            if config_file.use_wandb:
+                try:
+                    import wandb
+                    wandb.log({
+                        "val/total_loss": eval_loss,
+                        "val/atac_loss": eval_loss_atac,
+                        "val/tf_loss": eval_loss_tf,
+                        "val/rna_loss": eval_loss_rna,
+                        "epoch": epoch
+                    })
+                except ImportError:
+                    pass
 
             # Early stopping based on eval_loss
             if eval_loss < best_eval_loss:

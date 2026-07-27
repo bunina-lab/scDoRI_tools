@@ -148,35 +148,74 @@ def get_specificity_weighted_topics(rna_anndata, groupby_key="celltype", normali
     
     return spec_matrix
 
-def get_rep_or_act_celltype_df(cell_tf, tf_names, rna_metacell, celltype_column_key, out_dir, label:Literal["act", "rep"]):
-    # aggregating activity per celltype
+def get_rep_or_act_celltype_df(
+    cell_tf,
+    tf_names,
+    rna_metacell,
+    celltype_column_key,
+    out_dir,
+    logger,
+    label: Literal["act", "rep"],
+):
+    # --- Build per-celltype mean activity matrix ---
     df_celltype_tf = pd.DataFrame(cell_tf, columns=tf_names)
     df_celltype_tf[celltype_column_key] = rna_metacell.obs[celltype_column_key].values
     df_celltype_tf = df_celltype_tf.groupby(celltype_column_key).mean()
     df_celltype_tf = df_celltype_tf.fillna(0)
-    # removing TF with 0/Nan activity
+
+    # Drop TFs with zero activity across all celltypes
     df_celltype_tf = df_celltype_tf.loc[:, (df_celltype_tf != 0).any(axis=0)]
 
-    #### Plot top TF activity per celltype ####
-    # top TFs per celltype
-    tf_list_plot = []
+    if df_celltype_tf.empty:
+        logger.warning(
+            f"[{label}] All TFs have zero activity across all celltypes. "
+            "Skipping plot and output."
+        )
+        return df_celltype_tf, {}
+
+    # --- Collect top TFs per celltype ---
+    N_MARKER = 25   # stored in JSON for benchmarking
+    N_PLOT   = 5    # shown in heatmap
+
+    tf_list_plot = set()
     celltype_tf_marker = {}
-    
-    ## gathers celltype specific top 25 TF --> later benchmarking reseaons
+
     for k in df_celltype_tf.index:
-        sorted_values = df_celltype_tf.loc[k].sort_values(ascending=False)[:25]
-        celltype_tf_marker.update({k:list(set(sorted_values.index.values))})
-        tf_list_plot = tf_list_plot +list(sorted_values[:5].index.values)
-    tf_list_plot=list(set(tf_list_plot))
+        sorted_vals = df_celltype_tf.loc[k].sort_values(ascending=False)
+        top_marker = sorted_vals.iloc[:N_MARKER]
+        top_plot   = sorted_vals.iloc[:N_PLOT]
 
-    plot_heatmap(
-        df_plot=df_celltype_tf.T.loc[tf_list_plot,:].T,
-        label=f"Top5_TF_celltype_{label}",
-        outdir=out_dir
-    )
-    print(celltype_tf_marker)
+        # Use .iloc for positional slicing -- avoids label-based edge cases
+        celltype_tf_marker[k] = top_marker.index.tolist()
+        tf_list_plot.update(top_plot.index.tolist())
 
-    df_celltype_tf.to_csv(out_dir/ f"celltype_{label}_TF_activity.tsv", sep="\t")
+    # Preserve a stable, deterministic order (sorted for reproducibility)
+    tf_list_plot = sorted(tf_list_plot)
+
+    # --- Guard: verify selected TFs are actually present in the DataFrame ---
+    valid_tfs = [tf for tf in tf_list_plot if tf in df_celltype_tf.columns]
+    missing   = set(tf_list_plot) - set(valid_tfs)
+    if missing:
+        logger.warning(f"[{label}] {len(missing)} TF(s) in tf_list_plot not found "
+                       f"in df_celltype_tf columns: {missing}")
+
+    if not valid_tfs:
+        logger.warning(f"[{label}] No valid TFs to plot after filtering. Skipping heatmap.")
+    else:
+        df_plot = df_celltype_tf[valid_tfs]   # cleaner than double-transpose .loc
+        if df_plot.empty:
+            logger.warning(f"[{label}] df_plot is empty — skipping heatmap.")
+        else:
+            plot_heatmap(
+                df_plot=df_plot,
+                label=f"Top5_TF_celltype_{label}",
+                outdir=out_dir,
+            )
+
+    logger.info(str(celltype_tf_marker))
+
+    # --- Save outputs ---
+    df_celltype_tf.to_csv(out_dir / f"celltype_{label}_TF_activity.tsv", sep="\t")
     save_json(celltype_tf_marker, out_dir / f"{label}_celltype_TFs.json")
 
     return df_celltype_tf, celltype_tf_marker
@@ -250,6 +289,238 @@ def plot_umap(anndata_obj, colour_col:list|str, outdir):
     fig.savefig(out_string)
     plt.close(fig)
 
+## TODO: Implement this umap
+def plot_umap_with_topic_overlay(adata, 
+                                 topics=None,
+                                 target_celltypes=None,
+                                 topic_colors=None,
+                                 colormap='coolwarm_r',
+                                 base_figsize=(16, 12), 
+                                 save_path=None,
+                                 point_size=20,
+                                 alpha=0.6,
+                                 show_labels=True,
+                                 label_fontsize=9):
+    """
+    Create a UMAP plot with topic expression overlay on specified cell types.
+    Color intensity (alpha) reflects each cell's topic activity score.
+    
+    Parameters:
+    -----------
+    adata : AnnData
+        Annotated data object with UMAP coordinates and topic scores
+    topics : list of str, optional
+        List of topic column names to plot. If None, no topic coloring is applied.
+    target_celltypes : list of str, optional
+        Explicit list of cell type names to color with topic scores.
+        All other cell types will be shown in gray.
+        If None, all cells are colored.
+    topic_colors : list of str, optional
+        List of colors for each topic. If None, uses a default color palette.
+        Must match length of topics if provided.
+    colormap : str, default='coolwarm_r'
+        Colormap used only when a single topic is provided.
+    base_figsize : tuple, default=(8, 6)
+        Base figure size (width, height). Width is expanded automatically
+        per additional topic colorbar so the UMAP panel stays undistorted.
+    save_path : str, optional
+        Path to save the figure
+    point_size : int, default=20
+        Size of scatter points
+    alpha : float, default=0.6
+        Max alpha cap for topic-colored points (0–1). Gray cells use this directly.
+    show_labels : bool, default=True
+        Whether to show cell type labels on the plot
+    label_fontsize : int, default=9
+        Font size for cell type labels
+        
+    Returns:
+    --------
+    fig, ax : matplotlib figure and axes objects
+
+    Examples:
+    ---------
+    # Color specific cell types, grey out the rest
+    plot_umap_with_topic_overlay(
+        adata,
+        topics=['Topic_27', 'Topic_4', 'Topic_30'],
+        target_celltypes=['Endothelial cell', 'Lymphatic Endothelial cell']
+    )
+
+    # Color all cells
+    plot_umap_with_topic_overlay(adata, topics=['Topic_27', 'Topic_4'])
+
+    # Just show cell type labels, no topic coloring
+    plot_umap_with_topic_overlay(adata)
+    """
+
+    import matplotlib.colors as mcolors
+    from matplotlib.cm import ScalarMappable
+    from matplotlib.colors import Normalize, LinearSegmentedColormap
+
+    # ── Input validation ──────────────────────────────────────────────────────
+    if topics is not None:
+        missing_topics = [t for t in topics if t not in adata.obs.columns]
+        if missing_topics:
+            raise ValueError(f"Topics not found in adata.obs: {missing_topics}")
+
+    if target_celltypes is not None:
+        if 'cell_type' not in adata.obs.columns:
+            raise ValueError("'cell_type' column not found in adata.obs")
+        available = set(adata.obs['cell_type'].unique())
+        missing_ct = [ct for ct in target_celltypes if ct not in available]
+        if missing_ct:
+            raise ValueError(f"Cell types not found in adata.obs['cell_type']: {missing_ct}")
+
+    # Default distinct colors per topic
+    default_colors = ['#FF6B6B', '#00CED1', '#8B008B', '#FFA500', '#32CD32',
+                      '#FF69B4', '#1E90FF', '#FFD700', '#DC143C', '#00FA9A']
+    if topic_colors is None:
+        topic_colors = default_colors[:len(topics)] if topics else []
+
+    # ── Figure size: expand width per colorbar to keep UMAP undistorted ───────
+    n_topics = len(topics) if topics else 0
+    # Each colorbar adds ~0.6 inches; single-topic uses one standard colorbar
+    cbar_width_per_topic = 0.7
+    legend_width         = 1.2  # for the discrete legend
+    extra_width = (n_topics * cbar_width_per_topic + legend_width) if n_topics > 1 \
+                  else (1.0 + legend_width)                         # single cbar
+    figsize = (base_figsize[0] + extra_width, base_figsize[1])
+
+    fig, ax = plt.subplots(figsize=figsize)
+
+    if 'X_umap' not in adata.obsm:
+        raise ValueError("UMAP coordinates not found. Run sc.tl.umap() first.")
+
+    umap_coords = adata.obsm['X_umap']
+    x, y = umap_coords[:, 0], umap_coords[:, 1]
+
+    # ── Cell masks ────────────────────────────────────────────────────────────
+    if target_celltypes is not None:
+        topic_mask = adata.obs['cell_type'].isin(target_celltypes)
+    else:
+        topic_mask = np.ones(len(adata), dtype=bool)
+    gray_mask = ~topic_mask
+
+    legend_handles = []
+
+    # ── Gray ("Other") cells ──────────────────────────────────────────────────
+    if gray_mask.any():
+        ax.scatter(x[gray_mask], y[gray_mask],
+                   c='#808080', s=point_size, alpha=alpha * 0.6, zorder=1)
+        legend_handles.append(
+            plt.scatter([], [], c='#808080', s=point_size, label='Other', alpha=alpha * 0.6)
+        )
+
+    # ── Topic-colored cells ───────────────────────────────────────────────────
+    if topics is not None and topic_mask.any():
+
+        if len(topics) == 1:
+            # Single topic: standard continuous colormap + one colorbar
+            topic_values = adata.obs.loc[topic_mask, topics[0]]
+            scatter = ax.scatter(x[topic_mask], y[topic_mask],
+                                 c=topic_values, cmap=colormap,
+                                 s=point_size, alpha=alpha, zorder=2,
+                                 vmin=topic_values.min(), vmax=topic_values.max())
+            cbar = plt.colorbar(scatter, ax=ax, shrink=0.25, aspect=15, pad=0.02)
+            cbar.set_label(topics[0], fontsize=9)
+
+        else:
+            # Multiple topics: winner-takes-all color, score-driven alpha
+            topic_matrix = adata.obs.loc[topic_mask, topics].values  # (n_cells, n_topics)
+            dominant_idx = np.argmax(topic_matrix, axis=1)
+
+            x_topic = x[topic_mask]
+            y_topic = y[topic_mask]
+
+            # Stack colorbars outside the plot; compute a fixed pad step
+            # so they sit neatly to the right without squeezing the UMAP
+            pad_start = 0.0001
+            pad_step  = cbar_width_per_topic / figsize[0]   # fraction of fig width
+
+            for i, (topic, color) in enumerate(zip(topics, topic_colors)):
+                cell_sel = dominant_idx == i
+
+                # Per-topic score range (all target cells, for consistent scaling)
+                all_scores  = topic_matrix[:, i]
+                vmin, vmax  = all_scores.min(), all_scores.max()
+                score_range = vmax - vmin if vmax != vmin else 1.0
+
+                # Build RGBA: fixed RGB, alpha proportional to score
+                base_rgb   = np.array(mcolors.to_rgb(color))
+                scores_sel = topic_matrix[cell_sel, i]
+                alpha_vals = ((scores_sel - vmin) / score_range) * alpha
+
+                if cell_sel.any():
+                    rgba = np.column_stack([
+                        np.tile(base_rgb, (cell_sel.sum(), 1)),
+                        alpha_vals
+                    ])
+                    ax.scatter(x_topic[cell_sel], y_topic[cell_sel],
+                               c=rgba, s=point_size, zorder=2)
+
+                # Per-topic colorbar: transparent → full color
+                cmap_colors = [(*base_rgb, 0.0), (*base_rgb, alpha)]
+                topic_cmap  = LinearSegmentedColormap.from_list(
+                    f'cmap_{topic}', cmap_colors, N=256
+                )
+                sm = ScalarMappable(cmap=topic_cmap, norm=Normalize(vmin=vmin, vmax=vmax))
+                sm.set_array([])
+
+                cbar = plt.colorbar(sm, ax=ax, shrink=0.22, aspect=14,
+                                    pad=pad_start + i/4 * pad_step/3)
+                cbar.set_label(topic, fontsize=11, color=color, fontweight='bold')
+                cbar.ax.yaxis.set_tick_params(labelsize=7)
+
+                legend_handles.append(
+                    plt.scatter([], [], c=[color], s=point_size,
+                                label=topic, alpha=alpha)
+                )
+
+    elif topics is None and topic_mask.any():
+        ax.scatter(x[topic_mask], y[topic_mask],
+                   c='#CCCCCC', s=point_size, alpha=alpha, zorder=2)
+
+    # ── Discrete legend ───────────────────────────────────────────────────────
+    if legend_handles:
+        # Push legend further right to sit past the colorbars
+        legend_x_offset = 1.02 + (n_topics * pad_step if n_topics > 1 else 0.08)
+        ax.legend(handles=legend_handles,
+                  frameon=True, fontsize=12,
+                  loc='center left', bbox_to_anchor=(legend_x_offset, 0.7),
+                  borderaxespad=0)
+
+    # ── Cell type labels ──────────────────────────────────────────────────────
+    if show_labels and 'cell_type' in adata.obs.columns:
+        for cell_type in adata.obs['cell_type'].unique():
+            mask = adata.obs['cell_type'] == cell_type
+            if mask.sum() > 0:
+                ax.text(np.median(x[mask]), np.median(y[mask]), cell_type,
+                        fontsize=label_fontsize, ha='center', va='center',
+                        bbox=dict(boxstyle='round,pad=0.3', facecolor='white',
+                                  alpha=0.8, edgecolor='gray', linewidth=0.5),
+                        fontweight='bold')
+
+    # ── Axis formatting ───────────────────────────────────────────────────────
+    ax.set_xlabel('UMAP1', fontsize=12)
+    ax.set_ylabel('UMAP2', fontsize=12)
+    ax.set_xticks([])
+    ax.set_yticks([])
+
+    if topics is not None:
+        ct_label = ', '.join(target_celltypes) if target_celltypes else 'All Cells'
+        ax.set_title(f'UMAP: Topic Expression — {ct_label}', fontsize=13)
+    else:
+        ax.set_title('UMAP: Cell Types', fontsize=13)
+
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path, dpi=800, bbox_inches='tight')
+
+    plt.show()
+    return fig, ax
+
 def plot_heatmap(df_plot, label, outdir):
     import matplotlib.pyplot as plt
     import seaborn as sns
@@ -268,11 +539,11 @@ def plot_heatmap(df_plot, label, outdir):
         linecolor='white',
         cbar_kws={
             'label': label,
-            'shrink': 0.9,  # Make colorbar slightly smaller
-            'orientation': 'horizontal',   # 'vertical' or 'horizontal'
-            'location': 'top',        # 'left', 'right', 'top', 'bottom'
-            'aspect': 20,   # Make colorbar thinner
-            'pad': 0.02,
+            'shrink': 0.25,  # Make colorbar slightly smaller
+            'orientation': 'vertical',   # 'vertical' or 'horizontal'
+            'location': 'right',        # 'left', 'right', 'top', 'bottom'
+            'aspect': 15,   # Make colorbar thinner
+            'pad': 0.01,
             'format': '%.1f',
         },
         ax=ax
@@ -442,6 +713,8 @@ def main(args):
 
     # adding scDoRI embedding to the anndata object
     rna_metacell.obsm["X_scdori"] = scdori_latent
+    for k in range(trainConfig.num_topics):
+        rna_metacell.obs["Topic_" + str(k)] = scdori_latent[:, k]
 
     # computing neighbourhood graph and UMAP based on scDoRI embedding, UMAP parameters can be set in config file
     compute_neighbors_umap(
@@ -466,7 +739,7 @@ def main(args):
     ### remove not active topics ###
     # removing topics not active highly in any of the celltypes
     select_topics = [
-        "Topic_" + str(k) for k in np.where(df_topic_celltype.max(axis=1) > 0.00)[0]
+        "Topic_" + str(k) for k in np.where(df_topic_celltype.max(axis=1) > 0.001)[0]
     ]
 
     plot_heatmap(
@@ -674,6 +947,7 @@ def main(args):
         tf_names=tf_names,
         rna_metacell=rna_metacell,
         celltype_column_key=celltype_column_key,
+        logger=logger,
         out_dir=out_dir,
         label="act"
     )
@@ -692,6 +966,7 @@ def main(args):
         tf_names=tf_names,
         rna_metacell=rna_metacell,
         celltype_column_key=celltype_column_key,
+        logger=logger,
         out_dir=out_dir,
         label="rep"
     )
@@ -763,7 +1038,27 @@ def main(args):
     )
 
     ### Save data ###
+    def sanitize_obs_columns(anndata_obj):
+        """
+        Checks and sanitizes column names in .obs of an AnnData object.
+        Replaces forbidden/special characters ('\', '/', '?', '!') in column names with '_'.
+        Changes are done in-place.
+        """
+        import re
+        safe_columns = []
+        for col in anndata_obj.obs.columns:
+            # Replace any forbidden character with "_"
+            safe_col = re.sub(r'[\\/?!]', '_', col)
+            safe_columns.append(safe_col)
+        # Only rename if needed
+        if list(anndata_obj.obs.columns) != safe_columns:
+            anndata_obj.obs.columns = safe_columns
 
+    # Apply to all AnnData objects before saving
+    sanitize_obs_columns(rna_metacell)
+    sanitize_obs_columns(atac_metacell)
+    sanitize_obs_columns(adata_peak)
+    sanitize_obs_columns(adata_gene)
     rna_metacell.write_h5ad(os.path.join(out_dir, "rna_metadata.h5ad"))
     atac_metacell.write_h5ad(os.path.join(out_dir, "atac_metadata.h5ad"))
     adata_peak.write_h5ad(os.path.join(out_dir, "adata_peak.h5ad"))

@@ -104,6 +104,12 @@ class TrainConfig:
     significance_cutoffs: List[float] = None
     num_permutations: int = 1000
 
+    # WANDB SETTINGS
+    use_wandb: bool = False
+    wandb_project: str = "scdori"
+    wandb_entity: str = None
+    wandb_run_name: str = None
+
     def __post_init__(self):
         """Initialize default lists and construct file paths."""
         if self.significance_cutoffs is None:
@@ -306,6 +312,16 @@ class TrainConfig:
                 'num_permutations': sig_config.get('num_permutations')
             })
         
+        # Wandb
+        if 'wandb' in config_dict:
+            wandb_config = config_dict['wandb']
+            kwargs.update({
+                'use_wandb': wandb_config.get('use_wandb', False),
+                'wandb_project': wandb_config.get('project', 'scdori'),
+                'wandb_entity': wandb_config.get('entity'),
+                'wandb_run_name': wandb_config.get('run_name')
+            })
+        
         # Remove None values to use defaults
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
         
@@ -419,6 +435,12 @@ class TrainConfig:
             'significance_testing': {
                 'cutoffs': self.significance_cutoffs,
                 'num_permutations': self.num_permutations
+            },
+            'wandb': {
+                'use_wandb': self.use_wandb,
+                'project': self.wandb_project,
+                'entity': self.wandb_entity,
+                'run_name': self.wandb_run_name
             }
         }
         

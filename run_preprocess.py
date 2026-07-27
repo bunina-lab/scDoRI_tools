@@ -16,6 +16,7 @@ from scdori.pp import (
     filter_protein_coding_genes,
     intersect_cells,
     keep_promoters_and_select_hv_peaks,
+    keep_promoter_mandatory_and_hv_peaks,
     load_anndata,
     load_gtf,
     load_motif_database,
@@ -74,11 +75,26 @@ def main(args):
                     tf_names_all.append(tf_name)
     tf_names_all = sorted(list(set(tf_names_all)))
 
+    ### Gene Selection ##
+    user_genes = ppConfig.genes_user
+    user_tfs = ppConfig.tfs_user
+
+    if ppConfig.gene_set_to_keep and Path(ppConfig.gene_set_to_keep).is_file():
+        ## get genes and tfs from the txt file
+        with open(ppConfig.gene_set_to_keep, "r") as fh:
+            user_forced_genes = list({line.replace("\n", "").strip() for line in fh if line.strip()})
+        
+        for u_gene in user_forced_genes:
+            if u_gene in tf_names_all:
+                user_tfs.append(u_gene)
+            else:
+                user_genes.append(u_gene)
+
     data_rna, final_genes, final_tfs = compute_hvgs_and_tfs(
         data_rna=data_rna,
         tf_names=tf_names_all,
-        user_genes=ppConfig.genes_user,
-        user_tfs=ppConfig.tfs_user,
+        user_genes=user_genes,
+        user_tfs=user_tfs,
         num_genes=ppConfig.num_genes,
         num_tfs=ppConfig.num_tfs,
         min_cells=ppConfig.min_cells_per_gene,
@@ -188,6 +204,11 @@ def main(args):
             overlap_positions = overlaps.df.index.values
             # Use iloc to set by position
             data_atac.var.iloc[overlap_positions, data_atac.var.columns.get_loc(ppConfig.promoter_col)] = True
+    
+    
+    if ppConfig.peak_set_to_keep:
+        with open(ppConfig.peak_set_to_keep, "r") as fh:
+            peak_set_to_keep = set([line.strip().replace("\n", "") for line in fh])
 
 
     data_atac = keep_promoters_and_select_hv_peaks(
@@ -195,7 +216,14 @@ def main(args):
         total_n_peaks=ppConfig.num_peaks,
         cluster_key="leiden",
         promoter_col=ppConfig.promoter_col,  # column in data_atac.var
-    )
+    ) if ppConfig.peak_set_to_keep is None else \
+        keep_promoter_mandatory_and_hv_peaks(
+            data_atac=data_atac,
+            total_n_peaks=ppConfig.num_peaks,
+            cluster_key="leiden",
+            promoter_col=ppConfig.promoter_col,  # column in data_atac.var
+            peak_set_to_keep=peak_set_to_keep
+        )
 
     logger.info(f"Final shape after combining promoters + HV => {data_atac.shape}")
 

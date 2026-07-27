@@ -535,7 +535,7 @@ def get_top_activators_per_topic(
         annot_kws={"size": 20},
     )
     if out_fig:
-        g.figure.savefig(out_fig, dpi=300)
+        g.figure.savefig(out_fig, dpi=800)
     plt.show()
 
     logger.info("=== Done plotting top regulators per topic ===")
@@ -640,7 +640,7 @@ def get_top_repressor_per_topic(
         annot_kws={"size": 20},
     )
     if out_fig:
-        g.figure.savefig(out_fig, dpi=300)
+        g.figure.savefig(out_fig, dpi=800)
     plt.show()
 
     logger.info("=== Done plotting top repressor regulators per topic ===")

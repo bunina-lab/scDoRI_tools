@@ -44,6 +44,7 @@ gene_selection:
   num_genes: 4000
   num_tfs: 300
   min_cells_per_gene: 4
+  gene_set_to_keep: "./path/gene_set.txt" ## path for geneset.txt, expects gene name per line
 
 # Peak selection parameters
 peak_selection:
@@ -57,6 +58,9 @@ peak_selection:
   keep_promoter_peaks: true
   promoter_col: "promoter_col"  # Column in ATAC .var indicating promoter peaks
   promoters_bed_file: ""
+
+  # Mandatory peaks
+  peak_set_to_keep: ./path/peak_set.txt ## peaks per line
 
 # Batch correction and clustering
 batch_correction:

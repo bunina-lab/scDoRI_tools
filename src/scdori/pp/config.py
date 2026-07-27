@@ -123,6 +123,8 @@ class PreprocessingConfig:
     num_genes: int = 4000
     num_tfs: int = 300
     min_cells_per_gene: int = 4
+    ##mandatory genes
+    gene_set_to_keep: str= ""
 
     # Genomic window
     window_size: int = 80000
@@ -138,6 +140,9 @@ class PreprocessingConfig:
     keep_promoter_peaks: bool = True
     promoter_col: str = "is_promoter"
     promoters_bed_file: str = ""
+
+    # Mandatory peaks
+    peak_set_to_keep: str = ""
 
     # Correlation & in-silico ChIP-seq
     motif_match_pvalue_threshold: float = 1e-3
@@ -232,7 +237,8 @@ class PreprocessingConfig:
                 'motif_database': gene_config.get('motif_database'),
                 'num_genes': gene_config.get('num_genes'),
                 'num_tfs': gene_config.get('num_tfs'),
-                'min_cells_per_gene': gene_config.get('min_cells_per_gene')
+                'min_cells_per_gene': gene_config.get('min_cells_per_gene'),
+                'gene_set_to_keep': gene_config.get('gene_set_to_keep')
             })
         
         # Peak selection
@@ -244,7 +250,8 @@ class PreprocessingConfig:
                 'peak_std_batch_key': peak_config.get('peak_std_batch_key'),
                 'keep_promoter_peaks': peak_config.get('keep_promoter_peaks'),
                 'promoter_col': peak_config.get('promoter_col'),
-                'promoters_bed_file': peak_config.get('promoters_bed_file')
+                'promoters_bed_file': peak_config.get('promoters_bed_file'),
+                'peak_set_to_keep' : peak_config.get('peak_set_to_keep')
             })
         
         # Batch correction
@@ -315,14 +322,16 @@ class PreprocessingConfig:
                 'motif_database': self.motif_database,
                 'num_genes': self.num_genes,
                 'num_tfs': self.num_tfs,
-                'min_cells_per_gene': self.min_cells_per_gene
+                'min_cells_per_gene': self.min_cells_per_gene,
+                'gene_set_to_keep': self.gene_set_to_keep
             },
             'peak_selection': {
                 'window_size': self.window_size,
                 'num_peaks': self.num_peaks,
                 'peak_std_batch_key': self.peak_std_batch_key,
                 'keep_promoter_peaks': self.keep_promoter_peaks,
-                'promoter_col': self.promoter_col
+                'promoter_col': self.promoter_col,
+                'peak_set_to_keep': self.peak_set_to_keep
             },
             'batch_correction': {
                 'batch_key': self.batch_key,

@@ -152,3 +152,77 @@ def keep_promoters_and_select_hv_peaks(
             f"{data_atac_nonprom_hv.shape[1]} HV => total {data_atac_sub.shape[1]} peaks."
         )
         return data_atac_sub
+
+
+def keep_promoter_mandatory_and_hv_peaks(
+    data_atac: ad.AnnData,
+    total_n_peaks: int,
+    cluster_key: str = "leiden",
+    promoter_col: str = "is_promoter",
+    peak_set_to_keep=None,
+) -> ad.AnnData:
+    """
+    Retain promoter peaks, an optional mandatory peak set, and the top
+    highly-variable peaks up to `total_n_peaks` total.
+    """
+    var_names = data_atac.var_names.tolist()  # list, stable order
+    var_name_to_idx = {name: i for i, name in enumerate(var_names)}
+
+    # --- Promoter mask ---
+    promoter_mask = data_atac.var[promoter_col].values.astype(bool)
+
+    # --- Mandatory mask ---
+    if peak_set_to_keep is not None:
+        peak_set_to_keep = set(peak_set_to_keep)  # O(1) lookup
+        mandatory_mask = np.array(
+            [name in peak_set_to_keep for name in var_names], dtype=bool
+        )
+    else:
+        mandatory_mask = np.zeros(data_atac.n_vars, dtype=bool)
+
+    # --- Required mask (union of both) ---
+    required_mask = promoter_mask | mandatory_mask
+
+    # Preserve original genomic order via boolean indexing (no sorting)
+    required_peaks = [name for name, m in zip(var_names, required_mask) if m]
+    n_required = len(required_peaks)
+
+    if n_required >= total_n_peaks:
+        logger.warning(
+            f"Required peaks ({n_required}) already meet or exceed "
+            f"total_n_peaks ({total_n_peaks}); returning required peaks only."
+        )
+        return data_atac[:, required_peaks].copy()
+
+    n_needed = total_n_peaks - n_required
+
+    if n_needed == 0:
+        return data_atac[:, required_peaks].copy()
+
+    # --- HV peak selection on non-required peaks ---
+    non_required_mask = ~required_mask
+    data_atac_nonreq = data_atac[:, non_required_mask].copy()  # copy, not view
+
+    data_atac_nonreq_hv = select_highly_variable_peaks_by_std(
+        data_atac_nonreq, n_needed, cluster_key
+    )
+
+    # --- Validate returned peak names exist in original object ---
+    hv_peaks = data_atac_nonreq_hv.var_names.tolist()
+    unknown = [p for p in hv_peaks if p not in var_name_to_idx]
+    if unknown:
+        raise ValueError(
+            f"select_highly_variable_peaks_by_std returned {len(unknown)} "
+            f"peak(s) not present in original AnnData: {unknown[:5]} ..."
+        )
+
+    # --- Merge: required first, then HV — both in original genomic order ---
+    required_set = set(required_peaks)
+    hv_peaks_ordered = [
+        name for name, m in zip(var_names, non_required_mask)
+        if m and name in set(hv_peaks)
+    ]
+
+    final_peaks = required_peaks + hv_peaks_ordered
+
+    return data_atac[:, final_peaks].copy()

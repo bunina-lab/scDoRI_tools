@@ -3,6 +3,10 @@
 *~
 buck-out/
 
+# Agents
+.gemini/
+GEMINI.md
+
 # Compiled files
 .venv/
 __pycache__/
@@ -19,3 +23,10 @@ __pycache__/
 /docs/generated/
 /docs/_build/
 .worktrees/
+
+#data
+./assets
+
+*.meme
+assets/motif_database/cisbp_human.meme
+assets/motif_database/cisbp_tf_list.txt
